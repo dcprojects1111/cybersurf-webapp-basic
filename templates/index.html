@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>CyberSurf — Breach Check</title>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@700;800&family=Roboto:wght@400;500&display=swap" rel="stylesheet"/>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:'Roboto',sans-serif;background:linear-gradient(160deg,#0a1628 0%,#0d2240 100%);min-height:100vh;padding:40px 20px;}
+    nav{display:flex;align-items:center;justify-content:space-between;max-width:600px;margin:0 auto 40px;}
+    .brand{font-family:'Montserrat',sans-serif;font-weight:800;font-size:20px;color:#fff;}
+    .brand span{color:#00d2ff;}
+    .logout{font-size:13px;color:rgba(252,253,242,.4);text-decoration:none;border:1px solid rgba(255,255,255,.15);padding:6px 14px;border-radius:6px;}
+    .logout:hover{color:#00d2ff;border-color:#00d2ff;}
+    .card{background:rgba(255,255,255,.04);border:1px solid rgba(0,210,255,.2);border-radius:18px;padding:44px 40px;max-width:600px;margin:0 auto;}
+    .badge{display:inline-block;background:rgba(0,210,255,.12);border:1px solid rgba(0,210,255,.35);color:#00d2ff;font-family:'Montserrat',sans-serif;font-weight:700;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;padding:4px 12px;border-radius:20px;margin-bottom:18px;}
+    h1{font-family:'Montserrat',sans-serif;font-weight:800;font-size:22px;color:#fcfdf2;margin-bottom:6px;}
+    .sub{font-size:14px;color:rgba(252,253,242,.5);margin-bottom:32px;}
+    .form-group{margin-bottom:20px;}
+    label{display:block;font-family:'Montserrat',sans-serif;font-weight:700;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:#00d2ff;margin-bottom:8px;}
+    input{width:100%;background:rgba(255,255,255,.06);border:1px solid rgba(0,210,255,.22);border-radius:8px;padding:13px 16px;font-size:15px;color:#fcfdf2;outline:none;font-family:'Roboto',sans-serif;}
+    input::placeholder{color:rgba(252,253,242,.28);}
+    input:focus{border-color:#00d2ff;background:rgba(0,210,255,.05);}
+    .hint{font-size:12px;color:rgba(252,253,242,.35);margin-top:5px;}
+    hr{border:none;border-top:1px solid rgba(0,210,255,.1);margin:24px 0;}
+    button{width:100%;background:linear-gradient(135deg,#00d2ff 0%,#0077be 100%);color:#fff;font-family:'Montserrat',sans-serif;font-weight:800;font-size:16px;padding:16px;border:none;border-radius:10px;cursor:pointer;transition:transform .2s;}
+    button:hover{transform:translateY(-2px);}
+    button:disabled{opacity:.6;cursor:not-allowed;transform:none;}
+    .error{background:rgba(255,71,87,.12);border:1px solid rgba(255,71,87,.3);color:#ff4757;padding:12px 16px;border-radius:8px;font-size:14px;margin-bottom:24px;}
+    .spinner{display:none;text-align:center;color:rgba(252,253,242,.5);margin-top:16px;font-size:14px;}
+  </style>
+</head>
+<body>
+  <nav>
+    <div class="brand">Cyber<span>Surf</span> Security</div>
+    <a href="/logout" class="logout">Sign out</a>
+  </nav>
+
+  <div class="card">
+    <div class="badge">Basic Breach Check — Internal Tool</div>
+    <h1>Run a Breach Check</h1>
+    <p class="sub">Enter customer details from the order. Report uploads to pCloud automatically.</p>
+
+    {% if error %}<div class="error">{{ error }}</div>{% endif %}
+
+    <form method="POST" action="/run-check" id="checkForm">
+      <div class="form-group">
+        <label>Customer Full Name</label>
+        <input type="text" name="name" placeholder="Jane Smith" required autofocus/>
+      </div>
+
+      <hr/>
+
+      <div class="form-group">
+        <label>Email Address 1</label>
+        <input type="email" name="email1" placeholder="customer@gmail.com" required/>
+      </div>
+
+      <div class="form-group">
+        <label>Email Address 2 <span style="font-weight:400;opacity:.5;">(optional)</span></label>
+        <input type="email" name="email2" placeholder="customer@work.com.au"/>
+        <p class="hint">Only if included in the order — both checked for the same $30.</p>
+      </div>
+
+      <hr/>
+
+      <button type="submit" id="submitBtn">Run Breach Check &rarr;</button>
+      <div class="spinner" id="spinner">&#9679; Querying Dehashed... this takes a few seconds</div>
+    </form>
+  </div>
+
+  <script>
+    document.getElementById('checkForm').addEventListener('submit', function() {
+      document.getElementById('submitBtn').disabled = true;
+      document.getElementById('submitBtn').textContent = 'Running check...';
+      document.getElementById('spinner').style.display = 'block';
+    });
+  </script>
+</body>
+</html>

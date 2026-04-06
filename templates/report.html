@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>CyberSurf — Report: {{ customer_name }}</title>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@700;800&family=Roboto:wght@400;500&display=swap" rel="stylesheet"/>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:'Roboto',sans-serif;background:linear-gradient(160deg,#0a1628 0%,#0d2240 100%);min-height:100vh;padding:40px 20px;}
+    nav{display:flex;align-items:center;justify-content:space-between;max-width:780px;margin:0 auto 32px;}
+    .brand{font-family:'Montserrat',sans-serif;font-weight:800;font-size:20px;color:#fff;}
+    .brand span{color:#00d2ff;}
+    .nav-right{display:flex;gap:12px;}
+    .btn-nav{font-size:13px;color:rgba(252,253,242,.4);text-decoration:none;border:1px solid rgba(255,255,255,.15);padding:6px 14px;border-radius:6px;}
+    .btn-nav:hover{color:#00d2ff;border-color:#00d2ff;}
+    .page{max-width:780px;margin:0 auto;}
+
+    /* Status banner */
+    .status-banner{padding:14px 20px;border-radius:10px;margin-bottom:24px;font-size:14px;display:flex;align-items:center;gap:10px;}
+    .status-ok{background:rgba(0,210,255,.1);border:1px solid rgba(0,210,255,.3);color:#00d2ff;}
+    .status-err{background:rgba(255,71,87,.1);border:1px solid rgba(255,71,87,.3);color:#ff4757;}
+
+    /* Summary cards */
+    .email-cards{display:flex;flex-direction:column;gap:16px;margin-bottom:24px;}
+    .email-card{background:rgba(255,255,255,.04);border:1px solid rgba(0,210,255,.15);border-radius:14px;padding:24px 28px;}
+    .email-card.risk-HIGH   {border-color:rgba(255,71,87,.5);background:rgba(255,71,87,.05);}
+    .email-card.risk-MEDIUM {border-color:rgba(255,165,0,.4);background:rgba(255,165,0,.04);}
+    .email-card.risk-LOW    {border-color:rgba(255,210,0,.3);background:rgba(255,210,0,.03);}
+    .email-card.risk-CLEAR  {border-color:rgba(0,210,100,.3);background:rgba(0,210,100,.03);}
+
+    .risk-badge{display:inline-block;font-family:'Montserrat',sans-serif;font-weight:800;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;padding:3px 10px;border-radius:20px;margin-bottom:10px;}
+    .risk-HIGH   .risk-badge{background:rgba(255,71,87,.2);color:#ff4757;}
+    .risk-MEDIUM .risk-badge{background:rgba(255,165,0,.2);color:#ffa500;}
+    .risk-LOW    .risk-badge{background:rgba(255,210,0,.2);color:#ffd200;}
+    .risk-CLEAR  .risk-badge{background:rgba(0,210,100,.2);color:#00d264;}
+
+    .email-addr{font-family:'Montserrat',sans-serif;font-weight:700;font-size:16px;color:#fcfdf2;margin-bottom:4px;}
+    .risk-desc{font-size:13px;color:rgba(252,253,242,.55);margin-bottom:16px;}
+    .breach-count{font-size:13px;color:rgba(252,253,242,.4);margin-bottom:16px;}
+
+    table{width:100%;border-collapse:collapse;font-size:13px;}
+    th{font-family:'Montserrat',sans-serif;font-size:10px;letter-spacing:1px;text-transform:uppercase;color:rgba(0,210,255,.7);padding:8px 12px;text-align:left;border-bottom:1px solid rgba(0,210,255,.1);}
+    td{padding:8px 12px;border-bottom:1px solid rgba(255,255,255,.04);color:rgba(252,253,242,.7);vertical-align:top;}
+    tr:last-child td{border-bottom:none;}
+
+    /* Balance */
+    .balance{font-size:12px;color:rgba(252,253,242,.3);text-align:right;margin-bottom:20px;}
+    .balance span{color:rgba(0,210,255,.6);}
+
+    /* Raw report */
+    .report-section{background:rgba(0,0,0,.25);border:1px solid rgba(255,255,255,.07);border-radius:10px;padding:20px 24px;margin-top:24px;}
+    .report-section h3{font-family:'Montserrat',sans-serif;font-size:12px;letter-spacing:1.5px;text-transform:uppercase;color:rgba(0,210,255,.6);margin-bottom:14px;}
+    pre{font-family:'Roboto Mono','Courier New',monospace;font-size:12px;color:rgba(252,253,242,.55);white-space:pre-wrap;line-height:1.7;}
+
+    /* Copy button */
+    .btn-copy{background:rgba(0,210,255,.1);border:1px solid rgba(0,210,255,.3);color:#00d2ff;font-family:'Montserrat',sans-serif;font-weight:700;font-size:12px;padding:6px 14px;border-radius:6px;cursor:pointer;margin-bottom:14px;}
+    .btn-copy:hover{background:rgba(0,210,255,.2);}
+    .btn-new{display:inline-block;background:linear-gradient(135deg,#00d2ff 0%,#0077be 100%);color:#fff;font-family:'Montserrat',sans-serif;font-weight:800;font-size:14px;padding:12px 28px;border-radius:10px;text-decoration:none;margin-top:24px;}
+  </style>
+</head>
+<body>
+  <nav>
+    <div class="brand">Cyber<span>Surf</span> Security</div>
+    <div class="nav-right">
+      <a href="/" class="btn-nav">New Check</a>
+      <a href="/logout" class="btn-nav">Sign out</a>
+    </div>
+  </nav>
+
+  <div class="page">
+
+    <!-- pCloud status -->
+    {% if uploaded %}
+    <div class="status-banner status-ok">
+      &#10003; Report uploaded to pCloud — /CyberSurf Reports/{{ filename }}
+    </div>
+    {% else %}
+    <div class="status-banner status-err">
+      &#9888; pCloud upload failed: {{ pcloud_error }} — copy the report below manually.
+    </div>
+    {% endif %}
+
+    <!-- API credits -->
+    {% if balance is not none %}
+    <p class="balance">Dehashed credits remaining: <span>{{ balance }}</span></p>
+    {% endif %}
+
+    <!-- Per-email results -->
+    <div class="email-cards">
+      {% for r in results %}
+      <div class="email-card risk-{{ r.risk[0] }}">
+        <div class="risk-badge">{{ r.risk[0] }}</div>
+        <div class="email-addr">{{ r.email }}</div>
+        <div class="risk-desc">{{ r.risk[1] }}</div>
+        <div class="breach-count">{{ r.total }} record(s) found across {{ r.breaches|length }} source(s)</div>
+
+        {% if r.total > 0 %}
+        <table>
+          <tr><th>Source</th><th>Records</th><th>Data Exposed</th></tr>
+          {% for source, info in r.breaches.items()|sort %}
+          <tr>
+            <td>{{ source }}</td>
+            <td>{{ info.count }}</td>
+            <td>{{ info.exposed_fields | join(', ') if info.exposed_fields else 'email only' }}</td>
+          </tr>
+          {% endfor %}
+        </table>
+        {% else %}
+        <p style="font-size:13px;color:rgba(0,210,100,.6);">No records found in this database.</p>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+
+    <!-- Full report text -->
+    <div class="report-section">
+      <h3>Full Report — Copy and email to customer</h3>
+      <button class="btn-copy" onclick="copyReport()">Copy to clipboard</button>
+      <pre id="reportText">{{ report_text }}</pre>
+    </div>
+
+    <a href="/" class="btn-new">&#43; Run Another Check</a>
+
+  </div>
+
+  <script>
+    function copyReport() {
+      const text = document.getElementById('reportText').innerText;
+      navigator.clipboard.writeText(text).then(() => {
+        const btn = document.querySelector('.btn-copy');
+        btn.textContent = 'Copied!';
+        setTimeout(() => btn.textContent = 'Copy to clipboard', 2000);
+      });
+    }
+  </script>
+</body>
+</html>
