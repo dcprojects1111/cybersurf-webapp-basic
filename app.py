@@ -5,22 +5,19 @@ Password-protected dashboard for running Basic Breach Checks.
 """
 
 import os
-import sys
-import json
 import requests
 from datetime import datetime
 from collections import defaultdict
 from flask import Flask, render_template, request, session, redirect, url_for, jsonify
 
-# Allow importing from parent directory
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from config import DEHASHED_API_KEY, PCLOUD_AUTH_TOKEN, PCLOUD_FOLDER
-
 app = Flask(__name__)
-app.secret_key = os.environ.get("APP_SECRET", "change-this-in-railway-env")
+app.secret_key = os.environ.get("APP_SECRET", "change-this-in-production")
 
-# Dashboard login password — set APP_PASSWORD in Railway environment variables
-APP_PASSWORD = os.environ.get("APP_PASSWORD", "CyberSurf2026!")
+# Credentials — set these as environment variables in Render
+APP_PASSWORD      = os.environ.get("APP_PASSWORD", "CyberSurf2026!")
+DEHASHED_API_KEY  = os.environ.get("DEHASHED_API_KEY", "")
+PCLOUD_AUTH_TOKEN = os.environ.get("PCLOUD_AUTH_TOKEN", "")
+PCLOUD_FOLDER     = os.environ.get("PCLOUD_FOLDER", "/CyberSurf Reports")
 
 DEHASHED_URL  = "https://api.dehashed.com/v2/search"
 PCLOUD_UPLOAD = "https://api.pcloud.com/uploadfile"
