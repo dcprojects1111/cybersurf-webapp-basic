@@ -17,7 +17,7 @@ app = Flask(__name__)
 app.secret_key = os.environ.get("APP_SECRET", "change-this-in-production")
 
 # Credentials — set these as environment variables in Render
-APP_PASSWORD      = os.environ.get("APP_PASSWORD", "CyberSurf2026!")
+APP_PASSWORD      = os.environ.get("APP_PASSWORD", "")
 DEHASHED_API_KEY  = os.environ.get("DEHASHED_API_KEY", "")
 PCLOUD_AUTH_TOKEN = os.environ.get("PCLOUD_AUTH_TOKEN", "")
 PCLOUD_FOLDER     = os.environ.get("PCLOUD_FOLDER", "/CyberSurf Reports")
