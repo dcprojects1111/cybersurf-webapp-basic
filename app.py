@@ -275,7 +275,7 @@ def build_report_text(customer_name, results):
         "  This report was delivered with your explicit consent under",
         "  CyberSurf Terms of Service.",
         "",
-        "  Questions: hello@cybersurf.com.au | cybersurf.com.au",
+        "  Questions: support@cybersurf.au | cybersurf.com.au",
         "  Sunshine Coast, QLD, Australia",
         sep,
         "",
