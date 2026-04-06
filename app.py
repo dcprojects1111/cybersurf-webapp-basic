@@ -20,7 +20,10 @@ DEHASHED_API_KEY  = os.environ.get("DEHASHED_API_KEY", "")
 PCLOUD_AUTH_TOKEN = os.environ.get("PCLOUD_AUTH_TOKEN", "")
 PCLOUD_FOLDER     = os.environ.get("PCLOUD_FOLDER", "/CyberSurf Reports")
 
+HIBP_API_KEY    = os.environ.get("HIBP_API_KEY", "")
+
 DEHASHED_URL    = "https://api.dehashed.com/v2/search"
+HIBP_URL        = "https://haveibeenpwned.com/api/v3"
 PCLOUD_UPLOAD   = "https://api.pcloud.com/uploadfile"
 PCLOUD_PUBLINK  = "https://api.pcloud.com/getfilepublink"
 
@@ -67,6 +70,32 @@ def query_dehashed(email):
     resp = requests.post(DEHASHED_URL, json=payload, headers=headers, timeout=15)
     resp.raise_for_status()
     return resp.json()
+
+
+def query_hibp(email):
+    """
+    Query HaveIBeenPwned v3 for verified breach data.
+    Returns list of breach dicts, empty list if clean, or None if key not configured.
+    """
+    if not HIBP_API_KEY:
+        return None  # skip gracefully if no key
+
+    try:
+        resp = requests.get(
+            f"{HIBP_URL}/breachedaccount/{email}",
+            params={"truncateResponse": "false"},
+            headers={
+                "hibp-api-key": HIBP_API_KEY,
+                "user-agent":   "CyberSurf-BreachCheck",
+            },
+            timeout=15,
+        )
+        if resp.status_code == 404:
+            return []   # clean — no breaches found
+        resp.raise_for_status()
+        return resp.json()
+    except Exception:
+        return None  # don't let HIBP failure break the whole check
 
 
 def process_entries(entries):
@@ -186,6 +215,28 @@ def build_report_text(customer_name, results):
                         if cred["username"]: parts.append(f"username: {cred['username']}")
                         if cred["password"]: parts.append(f"password: {cred['password']}")
                         lines.append(f"    → {' | '.join(parts)}")
+                lines.append("")
+
+    # HIBP verified breach summary per email
+    any_hibp = any(r.get("hibp") for r in results)
+    if any_hibp:
+        lines += [sep, "  HAVE I BEEN PWNED — VERIFIED BREACH RECORDS", sep]
+        for r in results:
+            hibp = r.get("hibp")
+            lines.append(f"  EMAIL: {r['email']}")
+            if hibp is None:
+                lines += ["  (HIBP check not available)", ""]
+            elif len(hibp) == 0:
+                lines += ["  No verified breaches found (HIBP).", ""]
+            else:
+                lines.append(f"  Found in {len(hibp)} verified breach(es):")
+                for b in sorted(hibp, key=lambda x: x.get("BreachDate", ""), reverse=True):
+                    classes = ", ".join(b.get("DataClasses", [])) or "unknown"
+                    lines += [
+                        f"    • {b.get('Name', 'Unknown')} ({b.get('BreachDate', 'unknown date')})",
+                        f"      Domain    : {b.get('Domain', '—')}",
+                        f"      Data types: {classes}",
+                    ]
                 lines.append("")
 
     # Recommendations
@@ -310,11 +361,16 @@ def run_check():
                 for info in breaches.values() for f in info["exposed_fields"]
             )
             risk, risk_desc = risk_level(total, any_pw)
+
+            # HIBP verified breach list (runs independently — failure is non-fatal)
+            hibp_breaches = query_hibp(email)
+
             results.append({
-                "email":    email,
-                "total":    total,
-                "breaches": breaches,
-                "risk":     (risk, risk_desc),
+                "email":        email,
+                "total":        total,
+                "breaches":     breaches,
+                "risk":         (risk, risk_desc),
+                "hibp":         hibp_breaches,   # list, [], or None
             })
     except Exception as e:
         return render_template("index.html", error=f"Dehashed API error: {e}")

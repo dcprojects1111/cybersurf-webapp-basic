@@ -60,6 +60,16 @@
     .cred-list{margin-top:6px;display:flex;flex-direction:column;gap:4px;}
     .cred-pill{display:inline-block;background:rgba(255,71,87,.1);border:1px solid rgba(255,71,87,.2);border-radius:6px;padding:4px 10px;font-family:monospace;font-size:12px;color:rgba(252,253,242,.8);}
 
+    /* HIBP section */
+    .hibp-section{margin-top:18px;border-top:1px solid rgba(255,255,255,.06);padding-top:14px;}
+    .hibp-section h4{font-family:'Montserrat',sans-serif;font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:rgba(0,210,255,.5);margin-bottom:10px;}
+    .hibp-breach{background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.06);border-radius:8px;padding:10px 14px;margin-bottom:8px;font-size:13px;}
+    .hibp-breach .bname{font-weight:500;color:rgba(252,253,242,.8);}
+    .hibp-breach .bdate{font-size:11px;color:rgba(252,253,242,.35);margin-left:8px;}
+    .hibp-breach .bclasses{font-size:12px;color:rgba(252,253,242,.45);margin-top:3px;}
+    .hibp-none{font-size:13px;color:rgba(0,210,100,.5);}
+    .hibp-skip{font-size:12px;color:rgba(252,253,242,.25);font-style:italic;}
+
     /* Raw report */
     .report-section{background:rgba(0,0,0,.25);border:1px solid rgba(255,255,255,.07);border-radius:10px;padding:20px 24px;margin-top:8px;}
     .report-section h3{font-family:'Montserrat',sans-serif;font-size:12px;letter-spacing:1.5px;text-transform:uppercase;color:rgba(0,210,255,.5);margin-bottom:12px;}
@@ -143,6 +153,27 @@
         {% else %}
         <p style="font-size:13px;color:rgba(0,210,100,.6);">No records found.</p>
         {% endif %}
+
+        <!-- HIBP Verified Breaches -->
+        {% if r.hibp is not none %}
+        <div class="hibp-section">
+          <h4>&#128737; HaveIBeenPwned — Verified Breach Records</h4>
+          {% if r.hibp | length == 0 %}
+          <p class="hibp-none">&#10003; Not found in any verified breaches (HIBP).</p>
+          {% else %}
+          {% for b in r.hibp | sort(attribute='BreachDate', reverse=True) %}
+          <div class="hibp-breach">
+            <span class="bname">{{ b.Name }}</span>
+            <span class="bdate">{{ b.BreachDate }}</span>
+            <div class="bclasses">{{ b.DataClasses | join(', ') }}</div>
+          </div>
+          {% endfor %}
+          {% endif %}
+        </div>
+        {% else %}
+        <p class="hibp-skip" style="margin-top:14px;">HIBP check not run — add HIBP_API_KEY to enable.</p>
+        {% endif %}
+
       </div>
       {% endfor %}
     </div>
