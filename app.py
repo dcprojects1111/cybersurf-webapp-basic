@@ -6,6 +6,8 @@ Includes exposed credentials in report, delivered via pCloud secure link.
 """
 
 import os
+import json
+import stripe
 import requests
 from datetime import datetime
 from collections import defaultdict
@@ -20,7 +22,15 @@ DEHASHED_API_KEY  = os.environ.get("DEHASHED_API_KEY", "")
 PCLOUD_AUTH_TOKEN = os.environ.get("PCLOUD_AUTH_TOKEN", "")
 PCLOUD_FOLDER     = os.environ.get("PCLOUD_FOLDER", "/CyberSurf Reports")
 
-HIBP_API_KEY    = os.environ.get("HIBP_API_KEY", "")
+HIBP_API_KEY          = os.environ.get("HIBP_API_KEY", "")
+STRIPE_SECRET_KEY     = os.environ.get("STRIPE_SECRET_KEY", "")
+STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
+APP_BASE_URL          = os.environ.get("APP_BASE_URL", "https://cybersurf-webapp-basic.onrender.com")
+
+if STRIPE_SECRET_KEY:
+    stripe.api_key = STRIPE_SECRET_KEY
+
+ORDERS_FILE = "/tmp/cybersurf_orders.json"
 
 DEHASHED_URL    = "https://api.dehashed.com/v2/search"
 HIBP_URL        = "https://haveibeenpwned.com/api/v3"
@@ -324,13 +334,122 @@ def get_pcloud_share_link(file_path):
         return None, str(e)
 
 
+# ─────────────────────────── Pending Orders ───────────────────────────────
+
+def load_orders():
+    try:
+        with open(ORDERS_FILE) as f:
+            return json.load(f)
+    except Exception:
+        return []
+
+def save_order(order):
+    orders = load_orders()
+    orders.append(order)
+    with open(ORDERS_FILE, "w") as f:
+        json.dump(orders, f)
+
+def delete_order(session_id):
+    orders = [o for o in load_orders() if o.get("session_id") != session_id]
+    with open(ORDERS_FILE, "w") as f:
+        json.dump(orders, f)
+
+
+# ─────────────────────────── Stripe ───────────────────────────────────────
+
+@app.route("/create-checkout", methods=["POST"])
+def create_checkout():
+    name   = request.form.get("name", "").strip()
+    phone  = request.form.get("phone", "").strip()
+    email1 = request.form.get("email1", "").strip().lower()
+    email2 = request.form.get("email2", "").strip().lower()
+
+    if not name or not email1:
+        return "Name and at least one email address are required.", 400
+
+    if not STRIPE_SECRET_KEY:
+        return "Stripe is not configured.", 500
+
+    checkout_session = stripe.checkout.Session.create(
+        payment_method_types=["card"],
+        line_items=[{
+            "price_data": {
+                "currency": "aud",
+                "product_data": {
+                    "name": "CyberSurf Basic Breach Check",
+                    "description": "Credential exposure report for up to 2 email addresses. "
+                                   "Delivered via secure link within 24 hours.",
+                },
+                "unit_amount": 3000,  # $30.00 AUD in cents
+            },
+            "quantity": 1,
+        }],
+        mode="payment",
+        customer_email=email1,
+        metadata={
+            "customer_name": name,
+            "phone":         phone,
+            "email1":        email1,
+            "email2":        email2,
+        },
+        success_url=f"{APP_BASE_URL}/checkout-success?session_id={{CHECKOUT_SESSION_ID}}",
+        cancel_url="https://cybersurf.au",
+    )
+    return redirect(checkout_session.url, code=303)
+
+
+@app.route("/checkout-success")
+def checkout_success():
+    return render_template("success.html")
+
+
+@app.route("/webhook", methods=["POST"])
+def webhook():
+    payload    = request.get_data()
+    sig_header = request.headers.get("Stripe-Signature", "")
+
+    if STRIPE_WEBHOOK_SECRET:
+        try:
+            event = stripe.Webhook.construct_event(payload, sig_header, STRIPE_WEBHOOK_SECRET)
+        except Exception:
+            return "", 400
+    else:
+        try:
+            event = json.loads(payload)
+        except Exception:
+            return "", 400
+
+    if event.get("type") == "checkout.session.completed":
+        sess = event["data"]["object"]
+        meta = sess.get("metadata", {})
+        save_order({
+            "session_id":    sess["id"],
+            "name":          meta.get("customer_name", "Unknown"),
+            "phone":         meta.get("phone", ""),
+            "email1":        meta.get("email1", ""),
+            "email2":        meta.get("email2", ""),
+            "paid_at":       datetime.now().strftime("%d %b %Y %H:%M"),
+            "amount":        f"${sess.get('amount_total', 3000) / 100:.2f} AUD",
+        })
+
+    return "", 200
+
+
+@app.route("/complete-order/<session_id>", methods=["POST"])
+def complete_order(session_id):
+    auth = require_auth()
+    if auth: return auth
+    delete_order(session_id)
+    return redirect(url_for("index"))
+
+
 # ─────────────────────────── Routes ───────────────────────────────────────
 
 @app.route("/")
 def index():
     auth = require_auth()
     if auth: return auth
-    return render_template("index.html")
+    return render_template("index.html", pending_orders=load_orders())
 
 
 @app.route("/run-check", methods=["POST"])
