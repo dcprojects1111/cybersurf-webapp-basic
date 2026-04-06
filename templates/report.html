@@ -8,54 +8,62 @@
   <style>
     *{box-sizing:border-box;margin:0;padding:0}
     body{font-family:'Roboto',sans-serif;background:linear-gradient(160deg,#0a1628 0%,#0d2240 100%);min-height:100vh;padding:40px 20px;}
-    nav{display:flex;align-items:center;justify-content:space-between;max-width:780px;margin:0 auto 32px;}
+    nav{display:flex;align-items:center;justify-content:space-between;max-width:820px;margin:0 auto 32px;}
     .brand{font-family:'Montserrat',sans-serif;font-weight:800;font-size:20px;color:#fff;}
     .brand span{color:#00d2ff;}
     .nav-right{display:flex;gap:12px;}
     .btn-nav{font-size:13px;color:rgba(252,253,242,.4);text-decoration:none;border:1px solid rgba(255,255,255,.15);padding:6px 14px;border-radius:6px;}
     .btn-nav:hover{color:#00d2ff;border-color:#00d2ff;}
-    .page{max-width:780px;margin:0 auto;}
+    .page{max-width:820px;margin:0 auto;}
 
-    /* Status banner */
-    .status-banner{padding:14px 20px;border-radius:10px;margin-bottom:24px;font-size:14px;display:flex;align-items:center;gap:10px;}
-    .status-ok{background:rgba(0,210,255,.1);border:1px solid rgba(0,210,255,.3);color:#00d2ff;}
-    .status-err{background:rgba(255,71,87,.1);border:1px solid rgba(255,71,87,.3);color:#ff4757;}
+    /* Banners */
+    .banner{padding:16px 20px;border-radius:10px;margin-bottom:16px;font-size:14px;}
+    .banner-ok   {background:rgba(0,210,255,.08);border:1px solid rgba(0,210,255,.25);color:#00d2ff;}
+    .banner-err  {background:rgba(255,71,87,.08);border:1px solid rgba(255,71,87,.25);color:#ff4757;}
+    .banner-warn {background:rgba(255,165,0,.08);border:1px solid rgba(255,165,0,.25);color:#ffa500;}
 
-    /* Summary cards */
-    .email-cards{display:flex;flex-direction:column;gap:16px;margin-bottom:24px;}
-    .email-card{background:rgba(255,255,255,.04);border:1px solid rgba(0,210,255,.15);border-radius:14px;padding:24px 28px;}
-    .email-card.risk-HIGH   {border-color:rgba(255,71,87,.5);background:rgba(255,71,87,.05);}
-    .email-card.risk-MEDIUM {border-color:rgba(255,165,0,.4);background:rgba(255,165,0,.04);}
-    .email-card.risk-LOW    {border-color:rgba(255,210,0,.3);background:rgba(255,210,0,.03);}
-    .email-card.risk-CLEAR  {border-color:rgba(0,210,100,.3);background:rgba(0,210,100,.03);}
-
-    .risk-badge{display:inline-block;font-family:'Montserrat',sans-serif;font-weight:800;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;padding:3px 10px;border-radius:20px;margin-bottom:10px;}
-    .risk-HIGH   .risk-badge{background:rgba(255,71,87,.2);color:#ff4757;}
-    .risk-MEDIUM .risk-badge{background:rgba(255,165,0,.2);color:#ffa500;}
-    .risk-LOW    .risk-badge{background:rgba(255,210,0,.2);color:#ffd200;}
-    .risk-CLEAR  .risk-badge{background:rgba(0,210,100,.2);color:#00d264;}
-
-    .email-addr{font-family:'Montserrat',sans-serif;font-weight:700;font-size:16px;color:#fcfdf2;margin-bottom:4px;}
-    .risk-desc{font-size:13px;color:rgba(252,253,242,.55);margin-bottom:16px;}
-    .breach-count{font-size:13px;color:rgba(252,253,242,.4);margin-bottom:16px;}
-
-    table{width:100%;border-collapse:collapse;font-size:13px;}
-    th{font-family:'Montserrat',sans-serif;font-size:10px;letter-spacing:1px;text-transform:uppercase;color:rgba(0,210,255,.7);padding:8px 12px;text-align:left;border-bottom:1px solid rgba(0,210,255,.1);}
-    td{padding:8px 12px;border-bottom:1px solid rgba(255,255,255,.04);color:rgba(252,253,242,.7);vertical-align:top;}
-    tr:last-child td{border-bottom:none;}
+    /* Share link box */
+    .share-box{background:rgba(0,210,255,.06);border:1px solid rgba(0,210,255,.3);border-radius:14px;padding:24px 28px;margin-bottom:24px;}
+    .share-box h2{font-family:'Montserrat',sans-serif;font-size:14px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:#00d2ff;margin-bottom:12px;}
+    .share-box p{font-size:13px;color:rgba(252,253,242,.55);margin-bottom:16px;}
+    .link-row{display:flex;gap:10px;align-items:center;}
+    .link-input{flex:1;background:rgba(0,0,0,.3);border:1px solid rgba(0,210,255,.25);border-radius:8px;padding:11px 14px;font-size:13px;color:#fcfdf2;font-family:monospace;outline:none;}
+    .btn-copy{background:linear-gradient(135deg,#00d2ff 0%,#0077be 100%);color:#fff;font-family:'Montserrat',sans-serif;font-weight:800;font-size:13px;padding:11px 20px;border:none;border-radius:8px;cursor:pointer;white-space:nowrap;}
+    .btn-copy:hover{opacity:.9;}
+    .share-note{font-size:12px;color:rgba(252,253,242,.3);margin-top:10px;}
 
     /* Balance */
     .balance{font-size:12px;color:rgba(252,253,242,.3);text-align:right;margin-bottom:20px;}
     .balance span{color:rgba(0,210,255,.6);}
 
-    /* Raw report */
-    .report-section{background:rgba(0,0,0,.25);border:1px solid rgba(255,255,255,.07);border-radius:10px;padding:20px 24px;margin-top:24px;}
-    .report-section h3{font-family:'Montserrat',sans-serif;font-size:12px;letter-spacing:1.5px;text-transform:uppercase;color:rgba(0,210,255,.6);margin-bottom:14px;}
-    pre{font-family:'Roboto Mono','Courier New',monospace;font-size:12px;color:rgba(252,253,242,.55);white-space:pre-wrap;line-height:1.7;}
+    /* Email result cards */
+    .email-cards{display:flex;flex-direction:column;gap:16px;margin-bottom:24px;}
+    .email-card{background:rgba(255,255,255,.04);border:1px solid rgba(0,210,255,.15);border-radius:14px;padding:24px 28px;}
+    .email-card.risk-HIGH  {border-color:rgba(255,71,87,.5);background:rgba(255,71,87,.04);}
+    .email-card.risk-MEDIUM{border-color:rgba(255,165,0,.4);background:rgba(255,165,0,.03);}
+    .email-card.risk-LOW   {border-color:rgba(255,210,0,.3);background:rgba(255,210,0,.03);}
+    .email-card.risk-CLEAR {border-color:rgba(0,210,100,.3);background:rgba(0,210,100,.03);}
+    .risk-badge{display:inline-block;font-family:'Montserrat',sans-serif;font-weight:800;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;padding:3px 10px;border-radius:20px;margin-bottom:10px;}
+    .risk-HIGH   .risk-badge{background:rgba(255,71,87,.2);color:#ff4757;}
+    .risk-MEDIUM .risk-badge{background:rgba(255,165,0,.2);color:#ffa500;}
+    .risk-LOW    .risk-badge{background:rgba(255,210,0,.2);color:#ffd200;}
+    .risk-CLEAR  .risk-badge{background:rgba(0,210,100,.2);color:#00d264;}
+    .email-addr{font-family:'Montserrat',sans-serif;font-weight:700;font-size:16px;color:#fcfdf2;margin-bottom:4px;}
+    .risk-desc{font-size:13px;color:rgba(252,253,242,.55);margin-bottom:16px;}
 
-    /* Copy button */
-    .btn-copy{background:rgba(0,210,255,.1);border:1px solid rgba(0,210,255,.3);color:#00d2ff;font-family:'Montserrat',sans-serif;font-weight:700;font-size:12px;padding:6px 14px;border-radius:6px;cursor:pointer;margin-bottom:14px;}
-    .btn-copy:hover{background:rgba(0,210,255,.2);}
+    table{width:100%;border-collapse:collapse;font-size:13px;margin-bottom:16px;}
+    th{font-family:'Montserrat',sans-serif;font-size:10px;letter-spacing:1px;text-transform:uppercase;color:rgba(0,210,255,.7);padding:8px 12px;text-align:left;border-bottom:1px solid rgba(0,210,255,.1);}
+    td{padding:8px 12px;border-bottom:1px solid rgba(255,255,255,.04);color:rgba(252,253,242,.7);vertical-align:top;}
+    tr:last-child td{border-bottom:none;}
+
+    /* Credential pills */
+    .cred-list{margin-top:6px;display:flex;flex-direction:column;gap:4px;}
+    .cred-pill{display:inline-block;background:rgba(255,71,87,.1);border:1px solid rgba(255,71,87,.2);border-radius:6px;padding:4px 10px;font-family:monospace;font-size:12px;color:rgba(252,253,242,.8);}
+
+    /* Raw report */
+    .report-section{background:rgba(0,0,0,.25);border:1px solid rgba(255,255,255,.07);border-radius:10px;padding:20px 24px;margin-top:8px;}
+    .report-section h3{font-family:'Montserrat',sans-serif;font-size:12px;letter-spacing:1.5px;text-transform:uppercase;color:rgba(0,210,255,.5);margin-bottom:12px;}
+    pre{font-family:'Roboto Mono','Courier New',monospace;font-size:12px;color:rgba(252,253,242,.5);white-space:pre-wrap;line-height:1.7;}
     .btn-new{display:inline-block;background:linear-gradient(135deg,#00d2ff 0%,#0077be 100%);color:#fff;font-family:'Montserrat',sans-serif;font-weight:800;font-size:14px;padding:12px 28px;border-radius:10px;text-decoration:none;margin-top:24px;}
   </style>
 </head>
@@ -70,54 +78,73 @@
 
   <div class="page">
 
-    <!-- pCloud status -->
-    {% if uploaded %}
-    <div class="status-banner status-ok">
-      &#10003; Report uploaded to pCloud — /CyberSurf Reports/{{ filename }}
+    <!-- Share link (primary action) -->
+    {% if share_link %}
+    <div class="share-box">
+      <h2>&#128279; Customer Secure Link — Send This</h2>
+      <p>Copy this link and send it to <strong style="color:#fcfdf2;">{{ customer_name }}</strong>. The report includes all breach details and any exposed credentials. Remind them to delete it after reading.</p>
+      <div class="link-row">
+        <input class="link-input" id="shareLink" value="{{ share_link }}" readonly/>
+        <button class="btn-copy" onclick="copyLink()">Copy Link</button>
+      </div>
+      <p class="share-note">&#9432; Hosted on pCloud. Delete the file from your pCloud account once the customer confirms receipt.</p>
+    </div>
+    {% elif uploaded %}
+    <div class="banner banner-warn">
+      &#9888; Report uploaded to pCloud but share link could not be generated: {{ link_error }}. File saved at: /CyberSurf Reports/{{ filename }}
     </div>
     {% else %}
-    <div class="status-banner status-err">
-      &#9888; pCloud upload failed: {{ pcloud_error }} — copy the report below manually.
+    <div class="banner banner-err">
+      &#9888; pCloud upload failed: {{ pcloud_error }}. Copy the report text below manually.
     </div>
     {% endif %}
 
-    <!-- API credits -->
     {% if balance is not none %}
     <p class="balance">Dehashed credits remaining: <span>{{ balance }}</span></p>
     {% endif %}
 
-    <!-- Per-email results -->
+    <!-- Per-email result cards -->
     <div class="email-cards">
       {% for r in results %}
       <div class="email-card risk-{{ r.risk[0] }}">
         <div class="risk-badge">{{ r.risk[0] }}</div>
         <div class="email-addr">{{ r.email }}</div>
         <div class="risk-desc">{{ r.risk[1] }}</div>
-        <div class="breach-count">{{ r.total }} record(s) found across {{ r.breaches|length }} source(s)</div>
 
         {% if r.total > 0 %}
         <table>
-          <tr><th>Source</th><th>Records</th><th>Data Exposed</th></tr>
+          <tr><th>Source</th><th>Records</th><th>Data Exposed</th><th>Credentials Found</th></tr>
           {% for source, info in r.breaches.items()|sort %}
           <tr>
             <td>{{ source }}</td>
             <td>{{ info.count }}</td>
             <td>{{ info.exposed_fields | join(', ') if info.exposed_fields else 'email only' }}</td>
+            <td>
+              {% if info.credentials %}
+              <div class="cred-list">
+                {% for cred in info.credentials[:5] %}
+                <span class="cred-pill">
+                  {% if cred.username %}user: {{ cred.username }}{% endif %}
+                  {% if cred.username and cred.password %} | {% endif %}
+                  {% if cred.password %}pw: {{ cred.password }}{% endif %}
+                </span>
+                {% endfor %}
+                {% if info.credentials|length > 5 %}
+                <span style="font-size:11px;color:rgba(252,253,242,.3);">+{{ info.credentials|length - 5 }} more in full report</span>
+                {% endif %}
+              </div>
+              {% else %}
+              <span style="color:rgba(252,253,242,.25);">—</span>
+              {% endif %}
+            </td>
           </tr>
           {% endfor %}
         </table>
         {% else %}
-        <p style="font-size:13px;color:rgba(0,210,100,.6);">No records found in this database.</p>
+        <p style="font-size:13px;color:rgba(0,210,100,.6);">No records found.</p>
         {% endif %}
       </div>
       {% endfor %}
-    </div>
-
-    <!-- Full report text -->
-    <div class="report-section">
-      <h3>Full Report — Copy and email to customer</h3>
-      <button class="btn-copy" onclick="copyReport()">Copy to clipboard</button>
-      <pre id="reportText">{{ report_text }}</pre>
     </div>
 
     <a href="/" class="btn-new">&#43; Run Another Check</a>
@@ -125,12 +152,12 @@
   </div>
 
   <script>
-    function copyReport() {
-      const text = document.getElementById('reportText').innerText;
-      navigator.clipboard.writeText(text).then(() => {
+    function copyLink() {
+      const input = document.getElementById('shareLink');
+      navigator.clipboard.writeText(input.value).then(() => {
         const btn = document.querySelector('.btn-copy');
         btn.textContent = 'Copied!';
-        setTimeout(() => btn.textContent = 'Copy to clipboard', 2000);
+        setTimeout(() => btn.textContent = 'Copy Link', 2000);
       });
     }
   </script>
