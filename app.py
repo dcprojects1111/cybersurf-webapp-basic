@@ -122,7 +122,8 @@ def process_entries(entries):
     seen_creds = set()
 
     for entry in entries:
-        source   = entry.get("database_name") or "Unknown Source"
+        source = entry.get("database_name") or "Unknown Source"
+        if isinstance(source, list): source = source[0] if source else "Unknown Source"
         breaches[source]["count"] += 1
 
         # Track field types
@@ -135,8 +136,11 @@ def process_entries(entries):
         if entry.get("ip_address"):      breaches[source]["exposed_fields"].add("IP address")
 
         # Capture unique credential pairs
+        # Dehashed v2 can return fields as lists — flatten to string
         password = entry.get("password") or ""
         username = entry.get("username") or ""
+        if isinstance(password, list): password = password[0] if password else ""
+        if isinstance(username, list): username = username[0] if username else ""
         if password or username:
             key = (source, username, password)
             if key not in seen_creds:
