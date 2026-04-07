@@ -59,6 +59,13 @@
           &nbsp;&middot;&nbsp; {{ order.phone }}
           &nbsp;&middot;&nbsp; Paid {{ order.paid_at }} &nbsp;&middot;&nbsp; {{ order.amount }}
         </div>
+        <div class="order-meta" style="margin-top:5px;">
+          {% if order.consent == 'yes' and order.consent_passwords == 'yes' %}
+          <span style="color:#00c864;">&#10003; Consent confirmed {{ order.consented_at }}</span>
+          {% else %}
+          <span style="color:#ff4757;">&#9888; No consent record</span>
+          {% endif %}
+        </div>
       </div>
       <div class="order-actions">
         <button class="btn-run" onclick="prefill('{{ order.name }}','{{ order.email1 }}','{{ order.email2 }}')">Run Check &rarr;</button>

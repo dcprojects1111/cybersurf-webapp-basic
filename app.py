@@ -412,16 +412,23 @@ def delete_order(session_id):
 
 @app.route("/create-checkout", methods=["POST"])
 def create_checkout():
-    name   = request.form.get("name", "").strip()
-    phone  = request.form.get("phone", "").strip()
-    email1 = request.form.get("email1", "").strip().lower()
-    email2 = request.form.get("email2", "").strip().lower()
+    name              = request.form.get("name", "").strip()
+    phone             = request.form.get("phone", "").strip()
+    email1            = request.form.get("email1", "").strip().lower()
+    email2            = request.form.get("email2", "").strip().lower()
+    consent           = request.form.get("consent", "")
+    consent_passwords = request.form.get("consent_passwords", "")
 
     if not name or not email1:
         return "Name and at least one email address are required.", 400
 
+    if consent != "yes" or consent_passwords != "yes":
+        return "Both consent declarations are required.", 400
+
     if not STRIPE_SECRET_KEY:
         return "Stripe is not configured.", 500
+
+    consented_at = datetime.now().strftime("%d %b %Y %H:%M AEST")
 
     checkout_session = stripe.checkout.Session.create(
         payment_method_types=["card"],
@@ -440,10 +447,13 @@ def create_checkout():
         mode="payment",
         customer_email=email1,
         metadata={
-            "customer_name": name,
-            "phone":         phone,
-            "email1":        email1,
-            "email2":        email2,
+            "customer_name":       name,
+            "phone":               phone,
+            "email1":              email1,
+            "email2":              email2,
+            "consent":             consent,
+            "consent_passwords":   consent_passwords,
+            "consented_at":        consented_at,
         },
         success_url=f"{APP_BASE_URL}/checkout-success?session_id={{CHECKOUT_SESSION_ID}}",
         cancel_url="https://cybersurf.au",
@@ -476,13 +486,16 @@ def webhook():
         sess = event["data"]["object"]
         meta = sess.get("metadata", {})
         save_order({
-            "session_id":    sess["id"],
-            "name":          meta.get("customer_name", "Unknown"),
-            "phone":         meta.get("phone", ""),
-            "email1":        meta.get("email1", ""),
-            "email2":        meta.get("email2", ""),
-            "paid_at":       datetime.now().strftime("%d %b %Y %H:%M"),
-            "amount":        f"${sess.get('amount_total', 3000) / 100:.2f} AUD",
+            "session_id":          sess["id"],
+            "name":                meta.get("customer_name", "Unknown"),
+            "phone":               meta.get("phone", ""),
+            "email1":              meta.get("email1", ""),
+            "email2":              meta.get("email2", ""),
+            "paid_at":             datetime.now().strftime("%d %b %Y %H:%M"),
+            "amount":              f"${sess.get('amount_total', 3000) / 100:.2f} AUD",
+            "consent":             meta.get("consent", ""),
+            "consent_passwords":   meta.get("consent_passwords", ""),
+            "consented_at":        meta.get("consented_at", ""),
         })
 
     return "", 200
