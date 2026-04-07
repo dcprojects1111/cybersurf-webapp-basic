@@ -170,132 +170,181 @@ def risk_level(total, has_passwords):
 
 # ─────────────────────────── Report Builder ───────────────────────────────
 
-def build_report_text(customer_name, results):
+def _e(s):
+    """HTML-escape a value safely."""
+    return str(s).replace("&","&amp;").replace("<","&lt;").replace(">","&gt;").replace('"',"&quot;")
+
+
+def build_report_html(customer_name, results):
     now = datetime.now().strftime("%d %B %Y %H:%M AEST")
-    sep = "=" * 64
 
-    lines = [
-        sep,
-        "  CYBERSURF SECURITY — BASIC BREACH CHECK REPORT",
-        "  CONFIDENTIAL — FOR AUTHORISED RECIPIENT ONLY",
-        sep,
-        f"  Customer   : {customer_name}",
-        f"  Date       : {now}",
-        f"  Prepared by: Darryl Wessling, CyberSurf Security",
-        sep,
-        "",
-        "IMPORTANT — READ FIRST",
-        "-" * 40,
-        "This report was prepared with your explicit consent and contains",
-        "personal credential data found in known data breaches.",
-        "Do not share this report. Delete it after you have reviewed it",
-        "and changed any exposed passwords.",
-        "",
-        "This report reflects data available in the Dehashed breach",
-        "intelligence database at the time of this search.",
-        "",
-    ]
+    risk_colours = {
+        "HIGH":   ("#ff4757", "rgba(255,71,87,.12)",  "rgba(255,71,87,.35)"),
+        "MEDIUM": ("#ffa500", "rgba(255,165,0,.10)",  "rgba(255,165,0,.35)"),
+        "LOW":    ("#ffd200", "rgba(255,210,0,.08)",  "rgba(255,210,0,.3)"),
+        "CLEAR":  ("#00d264", "rgba(0,210,100,.08)",  "rgba(0,210,100,.3)"),
+    }
 
-    for r in results:
-        risk, risk_desc = r["risk"]
-        symbol = {"CLEAR": "✓", "LOW": "!", "MEDIUM": "!!", "HIGH": "!!!"}[risk]
-
-        lines += [
-            sep,
-            f"  EMAIL: {r['email']}",
-            sep,
-            f"  RISK LEVEL : [{symbol}] {risk}",
-            f"  SUMMARY    : {risk_desc}",
-            f"  BREACHES   : {r['total']} record(s) across {len(r['breaches'])} source(s)",
-            "",
-        ]
-
-        if r["total"] == 0:
-            lines += ["  No records found for this address in the database.", ""]
-        else:
-            lines += ["  BREACH DETAILS", "  " + "-" * 40]
-            for source, info in sorted(r["breaches"].items()):
-                fields = ", ".join(info["exposed_fields"]) if info["exposed_fields"] else "email address only"
-                lines += [
-                    f"  Source  : {source}",
-                    f"  Records : {info['count']}",
-                    f"  Exposed : {fields}",
-                ]
-                # Include actual credentials if present
-                if info["credentials"]:
-                    lines.append("  Credentials found:")
-                    for cred in info["credentials"][:10]:  # cap at 10 per source
-                        parts = []
-                        if cred["username"]: parts.append(f"username: {cred['username']}")
-                        if cred["password"]: parts.append(f"password: {cred['password']}")
-                        lines.append(f"    → {' | '.join(parts)}")
-                lines.append("")
-
-    # HIBP verified breach summary per email
-    any_hibp = any(r.get("hibp") for r in results)
-    if any_hibp:
-        lines += [sep, "  HAVE I BEEN PWNED — VERIFIED BREACH RECORDS", sep]
-        for r in results:
-            hibp = r.get("hibp")
-            lines.append(f"  EMAIL: {r['email']}")
-            if hibp is None:
-                lines += ["  (HIBP check not available)", ""]
-            elif len(hibp) == 0:
-                lines += ["  No verified breaches found (HIBP).", ""]
-            else:
-                lines.append(f"  Found in {len(hibp)} verified breach(es):")
-                for b in sorted(hibp, key=lambda x: x.get("BreachDate", ""), reverse=True):
-                    classes = ", ".join(b.get("DataClasses", [])) or "unknown"
-                    lines += [
-                        f"    • {b.get('Name', 'Unknown')} ({b.get('BreachDate', 'unknown date')})",
-                        f"      Domain    : {b.get('Domain', '—')}",
-                        f"      Data types: {classes}",
-                    ]
-                lines.append("")
-
-    # Recommendations
     any_pw = any(
         "password" in f or "hashed password" in f
         for r in results for info in r["breaches"].values() for f in info["exposed_fields"]
     )
 
-    lines += [sep, "  RECOMMENDED ACTIONS", sep]
-    n = 1
-    if any_pw:
-        lines += [
-            f"  {n}. CHANGE PASSWORDS IMMEDIATELY",
-            "     Change the password on every account that used any of the",
-            "     passwords listed above — especially email, banking, and",
-            "     social media accounts.",
-            "",
-        ]
-        n += 1
+    # ── Per-email cards ────────────────────────────────────────────────────
+    cards_html = ""
+    for r in results:
+        risk, risk_desc = r["risk"]
+        fg, bg, border = risk_colours.get(risk, ("#fcfdf2", "rgba(255,255,255,.05)", "rgba(255,255,255,.15)"))
 
-    lines += [
-        f"  {n}. Enable multi-factor authentication (MFA) on all important accounts.",
-        "",
-        f"  {n+1}. Check for suspicious logins — look for unknown devices or locations.",
-        "",
-        f"  {n+2}. Use a password manager (Bitwarden is free) — unique password for",
-        "     every account, never reuse.",
-        "",
-        sep,
-        "  ABOUT CYBERSURF",
-        sep,
-        "  CyberSurf does not retain your email addresses, credentials,",
-        "  or any breach data after this report is generated.",
-        "  Zero retention policy — all data discarded after report delivery.",
-        "",
-        "  This report was delivered with your explicit consent under",
-        "  CyberSurf Terms of Service.",
-        "",
-        "  Questions: support@cybersurf.au | cybersurf.com.au",
-        "  Sunshine Coast, QLD, Australia",
-        sep,
-        "",
+        breach_rows = ""
+        if r["total"] == 0:
+            breach_rows = '<p style="color:#00d264;font-size:14px;margin:16px 0 0;">&#10003; No breach records found for this address.</p>'
+        else:
+            for source, info in sorted(r["breaches"].items()):
+                fields = ", ".join(info["exposed_fields"]) if info["exposed_fields"] else "email address only"
+                cred_html = ""
+                if info["credentials"]:
+                    pills = ""
+                    for cred in info["credentials"][:10]:
+                        parts = []
+                        if cred["username"]: parts.append(f"user: {_e(cred['username'])}")
+                        if cred["password"]: parts.append(f"pw: {_e(cred['password'])}")
+                        if parts:
+                            pills += f'<span style="display:inline-block;background:rgba(255,71,87,.12);border:1px solid rgba(255,71,87,.25);border-radius:5px;padding:3px 9px;font-family:monospace;font-size:12px;margin:2px 2px 2px 0;color:#ffcdd2;">{" &nbsp;|&nbsp; ".join(parts)}</span>'
+                    if info["credentials"].__len__() > 10:
+                        pills += f'<span style="font-size:11px;color:rgba(252,253,242,.3);margin-left:6px;">+{len(info["credentials"])-10} more</span>'
+                    cred_html = f'<div style="margin-top:6px;">{pills}</div>'
+
+                breach_rows += f"""
+                <tr>
+                  <td style="padding:10px 14px;border-bottom:1px solid rgba(255,255,255,.05);color:rgba(252,253,242,.85);vertical-align:top;">{_e(source)}</td>
+                  <td style="padding:10px 14px;border-bottom:1px solid rgba(255,255,255,.05);color:rgba(252,253,242,.7);vertical-align:top;">{_e(info['count'])}</td>
+                  <td style="padding:10px 14px;border-bottom:1px solid rgba(255,255,255,.05);color:rgba(252,253,242,.7);vertical-align:top;">{_e(fields)}{cred_html}</td>
+                </tr>"""
+
+            breach_rows = f"""
+            <table style="width:100%;border-collapse:collapse;font-size:13px;margin-top:16px;">
+              <tr>
+                <th style="font-size:10px;letter-spacing:1px;text-transform:uppercase;color:rgba(0,210,255,.6);padding:8px 14px;text-align:left;border-bottom:1px solid rgba(0,210,255,.15);">Breach Source</th>
+                <th style="font-size:10px;letter-spacing:1px;text-transform:uppercase;color:rgba(0,210,255,.6);padding:8px 14px;text-align:left;border-bottom:1px solid rgba(0,210,255,.15);">Records</th>
+                <th style="font-size:10px;letter-spacing:1px;text-transform:uppercase;color:rgba(0,210,255,.6);padding:8px 14px;text-align:left;border-bottom:1px solid rgba(0,210,255,.15);">Data Exposed / Credentials</th>
+              </tr>
+              {breach_rows}
+            </table>"""
+
+        # HIBP section
+        hibp = r.get("hibp")
+        hibp_html = ""
+        if hibp is not None:
+            hibp_inner = ""
+            if len(hibp) == 0:
+                hibp_inner = '<p style="color:#00d264;font-size:13px;">&#10003; Not found in any verified breaches (HaveIBeenPwned).</p>'
+            else:
+                for b in sorted(hibp, key=lambda x: x.get("BreachDate",""), reverse=True):
+                    classes = _e(", ".join(b.get("DataClasses", [])) or "unknown")
+                    hibp_inner += f"""
+                    <div style="background:rgba(255,255,255,.03);border:1px solid rgba(255,255,255,.07);border-radius:8px;padding:10px 14px;margin-bottom:8px;">
+                      <span style="font-size:13px;color:rgba(252,253,242,.85);font-weight:500;">{_e(b.get('Name','Unknown'))}</span>
+                      <span style="font-size:11px;color:rgba(252,253,242,.35);margin-left:10px;">{_e(b.get('BreachDate','unknown date'))}</span>
+                      <div style="font-size:12px;color:rgba(252,253,242,.5);margin-top:4px;">Domain: {_e(b.get('Domain','—'))} &nbsp;·&nbsp; Data: {classes}</div>
+                    </div>"""
+            hibp_html = f"""
+            <div style="margin-top:20px;padding-top:16px;border-top:1px solid rgba(255,255,255,.07);">
+              <p style="font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:rgba(0,210,255,.5);margin-bottom:12px;">&#128737; HaveIBeenPwned — Verified Breach Records</p>
+              {hibp_inner}
+            </div>"""
+
+        cards_html += f"""
+        <div style="background:{bg};border:1px solid {border};border-radius:14px;padding:24px 28px;margin-bottom:20px;">
+          <div style="display:inline-block;background:rgba(0,0,0,.2);border:1px solid {border};color:{fg};font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;padding:3px 12px;border-radius:20px;margin-bottom:12px;">{_e(risk)}</div>
+          <div style="font-size:17px;font-weight:700;color:#fcfdf2;margin-bottom:4px;">{_e(r['email'])}</div>
+          <div style="font-size:13px;color:rgba(252,253,242,.55);margin-bottom:4px;">{_e(risk_desc)}</div>
+          <div style="font-size:12px;color:rgba(252,253,242,.35);">{r['total']} record(s) across {len(r['breaches'])} source(s)</div>
+          {breach_rows}
+          {hibp_html}
+        </div>"""
+
+    # ── Recommendations ────────────────────────────────────────────────────
+    recs = []
+    if any_pw:
+        recs.append(("<span style='color:#ff4757;'>&#9888; Change your passwords immediately</span>",
+                     "Change the password on every account that used any of the passwords listed above — especially email, banking, and social media. Do not reuse passwords."))
+    recs += [
+        ("Enable multi-factor authentication (MFA)",
+         "Turn on 2-step verification on your email, banking, and social media accounts. Use an authenticator app (Google Authenticator or Aegis) rather than SMS where possible."),
+        ("Check for suspicious logins",
+         "Review recent login activity on your important accounts. Look for unknown devices or unfamiliar locations."),
+        ("Use a password manager",
+         "Bitwarden is free and open source. It generates strong, unique passwords for every account so a single breach never puts your other accounts at risk."),
     ]
 
-    return "\n".join(lines)
+    recs_html = ""
+    for i, (title, body) in enumerate(recs, 1):
+        recs_html += f"""
+        <div style="display:flex;gap:16px;align-items:flex-start;margin-bottom:16px;">
+          <div style="background:rgba(0,210,255,.15);color:#00d2ff;font-size:12px;font-weight:700;width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px;">{i}</div>
+          <div>
+            <div style="font-size:14px;font-weight:500;color:#fcfdf2;margin-bottom:4px;">{title}</div>
+            <div style="font-size:13px;color:rgba(252,253,242,.6);line-height:1.6;">{body}</div>
+          </div>
+        </div>"""
+
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <title>CyberSurf Security — Breach Check Report</title>
+  <style>
+    *{{box-sizing:border-box;margin:0;padding:0}}
+    body{{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;background:linear-gradient(160deg,#0a1628 0%,#0d2240 100%);min-height:100vh;padding:40px 20px;color:#fcfdf2;}}
+    .page{{max-width:760px;margin:0 auto;}}
+    @media print{{body{{background:#fff!important;color:#000!important;padding:0;}}}}
+  </style>
+</head>
+<body>
+<div class="page">
+
+  <!-- Header -->
+  <div style="background:rgba(0,0,0,.3);border:1px solid rgba(0,210,255,.2);border-radius:14px;padding:28px 32px;margin-bottom:20px;">
+    <div style="font-size:22px;font-weight:800;color:#fff;margin-bottom:2px;">Cyber<span style="color:#00d2ff;">Surf</span> Security</div>
+    <div style="font-size:13px;color:rgba(0,210,255,.7);font-weight:600;letter-spacing:1px;text-transform:uppercase;margin-bottom:20px;">Basic Breach Check Report</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:13px;">
+      <div><span style="color:rgba(252,253,242,.4);">Customer</span> &nbsp; <span style="color:#fcfdf2;font-weight:500;">{_e(customer_name)}</span></div>
+      <div><span style="color:rgba(252,253,242,.4);">Date</span> &nbsp; <span style="color:#fcfdf2;">{_e(now)}</span></div>
+      <div><span style="color:rgba(252,253,242,.4);">Prepared by</span> &nbsp; <span style="color:#fcfdf2;">Darryl Wessling, CyberSurf Security</span></div>
+      <div><span style="color:rgba(252,253,242,.4);">Classification</span> &nbsp; <span style="color:#ff4757;font-weight:600;">CONFIDENTIAL</span></div>
+    </div>
+  </div>
+
+  <!-- Warning banner -->
+  <div style="background:rgba(255,165,0,.08);border:1px solid rgba(255,165,0,.3);border-radius:10px;padding:16px 20px;margin-bottom:24px;font-size:13px;color:rgba(252,253,242,.75);line-height:1.7;">
+    <strong style="color:#ffa500;">&#9888; Important — Read First</strong><br/>
+    This report was prepared with your explicit consent and contains personal credential data found in known data breach databases.
+    <strong style="color:#fcfdf2;">Do not share this report.</strong> Delete it after you have reviewed it and changed any exposed passwords.
+  </div>
+
+  <!-- Email result cards -->
+  {cards_html}
+
+  <!-- Recommendations -->
+  <div style="background:rgba(255,255,255,.03);border:1px solid rgba(0,210,255,.15);border-radius:14px;padding:24px 28px;margin-bottom:20px;">
+    <p style="font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:rgba(0,210,255,.6);margin-bottom:18px;">Recommended Actions</p>
+    {recs_html}
+  </div>
+
+  <!-- Footer -->
+  <div style="background:rgba(0,0,0,.2);border:1px solid rgba(255,255,255,.07);border-radius:14px;padding:20px 28px;font-size:12px;color:rgba(252,253,242,.4);line-height:1.8;">
+    <strong style="color:rgba(252,253,242,.6);">About CyberSurf</strong><br/>
+    CyberSurf does not retain your email addresses, credentials, or any breach data after this report is generated.
+    Zero retention policy — all data is discarded after report delivery.<br/>
+    This report was delivered with your explicit consent under CyberSurf Terms of Service.<br/><br/>
+    Questions: <span style="color:#00d2ff;">support@cybersurf.au</span> &nbsp;·&nbsp; cybersurf.com.au &nbsp;·&nbsp; Sunshine Coast, QLD, Australia
+  </div>
+
+</div>
+</body>
+</html>"""
 
 
 # ─────────────────────────── pCloud ───────────────────────────────────────
@@ -306,7 +355,7 @@ def upload_to_pcloud(filename, content):
         resp = requests.post(
             PCLOUD_UPLOAD,
             params={"path": PCLOUD_FOLDER, "auth": PCLOUD_AUTH_TOKEN},
-            files={"file": (filename, content.encode(), "text/plain")},
+            files={"file": (filename, content.encode(), "text/html")},
             timeout=30,
         )
         data = resp.json()
@@ -499,10 +548,10 @@ def run_check():
         return render_template("index.html", error=f"Dehashed API error: {e}")
 
     # Build report
-    report_text = build_report_text(customer_name, results)
+    report_text = build_report_html(customer_name, results)
     safe_name   = customer_name.replace(" ", "_")
     date_str    = datetime.now().strftime("%Y-%m-%d_%H%M")
-    filename    = f"{safe_name}_{date_str}.txt"
+    filename    = f"{safe_name}_{date_str}.html"
 
     # Upload to pCloud
     uploaded, file_path, pcloud_error = upload_to_pcloud(filename, report_text)
