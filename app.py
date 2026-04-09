@@ -9,6 +9,8 @@ import os
 import json
 import stripe
 import requests
+import psycopg2
+import psycopg2.extras
 from datetime import datetime
 from collections import defaultdict
 from flask import Flask, render_template, request, session, redirect, url_for
@@ -30,7 +32,36 @@ APP_BASE_URL          = os.environ.get("APP_BASE_URL", "https://cybersurf-webapp
 if STRIPE_SECRET_KEY:
     stripe.api_key = STRIPE_SECRET_KEY
 
-ORDERS_FILE = "/tmp/cybersurf_orders.json"
+DATABASE_URL = os.environ.get("DATABASE_URL", "")
+
+
+def get_db():
+    conn = psycopg2.connect(DATABASE_URL)
+    return conn
+
+
+def init_db():
+    if not DATABASE_URL:
+        return
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS orders (
+                    session_id   TEXT PRIMARY KEY,
+                    name         TEXT,
+                    phone        TEXT,
+                    email1       TEXT,
+                    email2       TEXT,
+                    paid_at      TEXT,
+                    amount       TEXT,
+                    consent      TEXT,
+                    consent_passwords TEXT,
+                    consented_at TEXT
+                )
+            """)
+
+
+init_db()
 
 DEHASHED_URL    = "https://api.dehashed.com/v2/search"
 HIBP_URL        = "https://haveibeenpwned.com/api/v3"
@@ -390,22 +421,35 @@ def get_pcloud_share_link(file_path):
 # ─────────────────────────── Pending Orders ───────────────────────────────
 
 def load_orders():
+    if not DATABASE_URL:
+        return []
     try:
-        with open(ORDERS_FILE) as f:
-            return json.load(f)
+        with get_db() as conn:
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                cur.execute("SELECT * FROM orders ORDER BY paid_at DESC")
+                return [dict(row) for row in cur.fetchall()]
     except Exception:
         return []
 
 def save_order(order):
-    orders = load_orders()
-    orders.append(order)
-    with open(ORDERS_FILE, "w") as f:
-        json.dump(orders, f)
+    if not DATABASE_URL:
+        return
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                INSERT INTO orders
+                    (session_id, name, phone, email1, email2, paid_at, amount, consent, consent_passwords, consented_at)
+                VALUES
+                    (%(session_id)s, %(name)s, %(phone)s, %(email1)s, %(email2)s, %(paid_at)s, %(amount)s, %(consent)s, %(consent_passwords)s, %(consented_at)s)
+                ON CONFLICT (session_id) DO NOTHING
+            """, order)
 
 def delete_order(session_id):
-    orders = [o for o in load_orders() if o.get("session_id") != session_id]
-    with open(ORDERS_FILE, "w") as f:
-        json.dump(orders, f)
+    if not DATABASE_URL:
+        return
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM orders WHERE session_id = %s", (session_id,))
 
 
 # ─────────────────────────── Stripe ───────────────────────────────────────
