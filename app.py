@@ -69,6 +69,23 @@ PCLOUD_UPLOAD   = "https://api.pcloud.com/uploadfile"
 PCLOUD_PUBLINK  = "https://api.pcloud.com/getfilepublink"
 
 
+# ─────────────────────────── Health Check ────────────────────────────────
+
+@app.route("/health")
+def health():
+    status = {"app": "ok", "database": "not configured"}
+    if DATABASE_URL:
+        try:
+            with get_db() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("SELECT 1")
+            status["database"] = "ok"
+        except Exception as e:
+            status["database"] = f"error: {e}"
+    from flask import jsonify
+    return jsonify(status), 200 if status["database"] in ("ok", "not configured") else 500
+
+
 # ─────────────────────────── Auth ─────────────────────────────────────────
 
 @app.route("/login", methods=["GET", "POST"])
