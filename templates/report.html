@@ -110,7 +110,7 @@
     {% endif %}
 
     {% if balance is not none %}
-    <p class="balance">Dehashed credits remaining: <span>{{ balance }}</span></p>
+    <p class="balance">API credits remaining: <span>{{ balance }}</span></p>
     {% endif %}
 
     <!-- Per-email result cards -->
@@ -157,9 +157,9 @@
         <!-- HIBP Verified Breaches -->
         {% if r.hibp is not none %}
         <div class="hibp-section">
-          <h4>&#128737; HaveIBeenPwned — Verified Breach Records</h4>
+          <h4>&#128737; Verified Breach Records</h4>
           {% if r.hibp | length == 0 %}
-          <p class="hibp-none">&#10003; Not found in any verified breaches (HIBP).</p>
+          <p class="hibp-none">&#10003; Not found in any verified breaches.</p>
           {% else %}
           {% for b in r.hibp | sort(attribute='BreachDate', reverse=True) %}
           <div class="hibp-breach">

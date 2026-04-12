@@ -328,7 +328,7 @@ def build_report_html(customer_name, results):
                     </div>"""
             hibp_html = f"""
             <div style="margin-top:20px;padding-top:16px;border-top:1px solid rgba(255,255,255,.07);">
-              <p style="font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:rgba(0,210,255,.5);margin-bottom:12px;">&#128737; HaveIBeenPwned — Verified Breach Records</p>
+              <p style="font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:rgba(0,210,255,.5);margin-bottom:12px;">&#128737; Verified Breach Records</p>
               {hibp_inner}
             </div>"""
 
