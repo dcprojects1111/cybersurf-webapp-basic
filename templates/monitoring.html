@@ -59,10 +59,23 @@
   </div>
 
   <div class="card">
-    <div class="price">$15 <span>/ month AUD</span></div>
-    <div class="price-note">Billed monthly · Cancel anytime</div>
+
+    <!-- Plan selector -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:28px;">
+      <label id="plan-monthly-label" style="border:2px solid #00d2ff;border-radius:12px;padding:16px;cursor:pointer;background:rgba(0,210,255,.08);">
+        <input type="radio" name="plan-choice" value="monthly" checked style="display:none;" onchange="setPlan('monthly')"/>
+        <div style="font-family:'Montserrat',sans-serif;font-weight:800;font-size:22px;color:#fcfdf2;">$15<span style="font-size:13px;font-weight:400;color:rgba(252,253,242,.4);"> /mo</span></div>
+        <div style="font-size:12px;color:rgba(252,253,242,.55);margin-top:4px;">Monthly · Cancel anytime</div>
+      </label>
+      <label id="plan-twomonth-label" style="border:2px solid rgba(255,255,255,.12);border-radius:12px;padding:16px;cursor:pointer;">
+        <input type="radio" name="plan-choice" value="two_month" style="display:none;" onchange="setPlan('two_month')"/>
+        <div style="font-family:'Montserrat',sans-serif;font-weight:800;font-size:22px;color:#fcfdf2;">$30<span style="font-size:13px;font-weight:400;color:rgba(252,253,242,.4);"> /2mo</span></div>
+        <div style="font-size:12px;color:rgba(252,253,242,.55);margin-top:4px;">2 months · You choose to renew</div>
+      </label>
+    </div>
 
     <form action="/subscribe-monitoring" method="POST">
+      <input type="hidden" name="plan" id="plan-input" value="monthly"/>
       <div class="form-group">
         <label>Your name</label>
         <input type="text" name="name" placeholder="Jane Smith" required/>
@@ -98,9 +111,33 @@
         </label>
       </div>
 
-      <button type="submit">Start monitoring — $15/mo</button>
+      <button type="submit" id="submit-btn">Start monitoring — $15/mo</button>
     </form>
   </div>
+
+  <script>
+    function setPlan(plan) {
+      var monthly = document.getElementById('plan-monthly-label');
+      var twomonth = document.getElementById('plan-twomonth-label');
+      var btn = document.getElementById('submit-btn');
+      var input = document.getElementById('plan-input');
+      if (plan === 'two_month') {
+        monthly.style.border = '2px solid rgba(255,255,255,.12)';
+        monthly.style.background = 'transparent';
+        twomonth.style.border = '2px solid #00d2ff';
+        twomonth.style.background = 'rgba(0,210,255,.08)';
+        btn.textContent = 'Start monitoring — $30 for 2 months';
+        input.value = 'two_month';
+      } else {
+        twomonth.style.border = '2px solid rgba(255,255,255,.12)';
+        twomonth.style.background = 'transparent';
+        monthly.style.border = '2px solid #00d2ff';
+        monthly.style.background = 'rgba(0,210,255,.08)';
+        btn.textContent = 'Start monitoring — $15/mo';
+        input.value = 'monthly';
+      }
+    }
+  </script>
 
   <div class="footer-note">
     Secured by Stripe &nbsp;·&nbsp; Zero data retention &nbsp;·&nbsp; Cancel anytime<br/>

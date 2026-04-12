@@ -34,8 +34,9 @@ STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
 APP_BASE_URL          = os.environ.get("APP_BASE_URL", "https://cybersurf-webapp-basic.onrender.com")
 
 # Dark Web Monitoring
-DWM_PRICE_ID    = os.environ.get("DWM_PRICE_ID", "")       # Stripe recurring price ID
-MONITOR_SECRET  = os.environ.get("MONITOR_SECRET", "")     # Secret to protect /run-monitoring
+DWM_PRICE_ID       = os.environ.get("DWM_PRICE_ID", "")        # Stripe recurring price ID ($15/mo)
+DWM_2MONTH_PRICE_ID = "price_1TLKpjBMlmXoVl2K53kWW4Kg"         # Stripe one-time price ID ($30 / 2 months)
+MONITOR_SECRET     = os.environ.get("MONITOR_SECRET", "")      # Secret to protect /run-monitoring
 
 # Email alerts (SMTP)
 SMTP_HOST  = os.environ.get("SMTP_HOST", "smtp.gmail.com")
@@ -83,10 +84,14 @@ def init_db():
                     monitor_email2         TEXT,
                     stripe_subscription_id TEXT UNIQUE,
                     stripe_customer_id     TEXT,
+                    plan                   TEXT DEFAULT 'monthly',
                     status                 TEXT DEFAULT 'active',
                     created_at             TEXT,
+                    created_date           DATE,
                     last_checked           TEXT,
-                    last_breach_hash       TEXT
+                    last_breach_hash       TEXT,
+                    reminder_55_sent       BOOLEAN DEFAULT FALSE,
+                    reminder_60_sent       BOOLEAN DEFAULT FALSE
                 )
             """)
 
@@ -510,11 +515,11 @@ def save_subscriber(sub):
                 INSERT INTO subscribers
                     (name, email, monitor_email1, monitor_email2,
                      stripe_subscription_id, stripe_customer_id,
-                     status, created_at)
+                     plan, status, created_at, created_date)
                 VALUES
                     (%(name)s, %(email)s, %(monitor_email1)s, %(monitor_email2)s,
                      %(stripe_subscription_id)s, %(stripe_customer_id)s,
-                     'active', %(created_at)s)
+                     %(plan)s, 'active', %(created_at)s, CURRENT_DATE)
                 ON CONFLICT (stripe_subscription_id) DO NOTHING
             """, sub)
 
@@ -626,6 +631,117 @@ def send_breach_alert(to_email, name, new_sources):
         return False, str(e)
 
 
+def send_renewal_reminder(to_email, name, days_left):
+    if not SMTP_USER or not SMTP_PASS:
+        return False, "SMTP not configured"
+    try:
+        if days_left == 5:
+            subject = "Your Dark Web Monitoring expires in 5 days — want to continue?"
+            headline = "Your 2-month pack expires in 5 days"
+            body = "Your Dark Web Monitoring coverage expires in 5 days. If you'd like to continue being protected, click below to subscribe monthly for $15/month — cancel anytime."
+        else:
+            subject = "Last day — your Dark Web Monitoring expires today"
+            headline = "Your coverage expires today"
+            body = "Today is the last day of your 2-month Dark Web Monitoring pack. Subscribe monthly to keep your protection active — $15/month, cancel anytime."
+
+        body_html = f"""<!DOCTYPE html>
+<html><head><meta charset="UTF-8"/></head>
+<body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;
+             background:#0a1628;color:#fcfdf2;padding:40px 20px;margin:0;">
+  <div style="max-width:520px;margin:0 auto;">
+    <div style="font-size:22px;font-weight:800;margin-bottom:4px;">
+      Cyber<span style="color:#00d2ff;">Surf</span> Security
+    </div>
+    <div style="font-size:12px;color:rgba(0,210,255,.7);letter-spacing:1px;
+                text-transform:uppercase;margin-bottom:28px;">Dark Web Monitoring</div>
+
+    <div style="background:rgba(0,210,255,.06);border:1px solid rgba(0,210,255,.25);
+                border-radius:12px;padding:24px 28px;margin-bottom:24px;">
+      <div style="font-size:16px;font-weight:700;color:#fcfdf2;margin-bottom:8px;">
+        {headline}
+      </div>
+      <p style="font-size:14px;color:rgba(252,253,242,.75);line-height:1.6;margin:0 0 20px;">
+        Hi {name}, {body}
+      </p>
+      <a href="{APP_BASE_URL}/dark-web-monitoring"
+         style="display:inline-block;background:linear-gradient(135deg,#00d2ff 0%,#0077be 100%);
+                color:#fff;font-weight:800;font-size:14px;padding:12px 28px;
+                border-radius:8px;text-decoration:none;">
+        Continue for $15/month &rarr;
+      </a>
+    </div>
+
+    <p style="font-size:13px;color:rgba(252,253,242,.4);line-height:1.7;">
+      No action needed if you don't want to continue — your monitoring will simply stop.
+      Questions? <a href="mailto:support@cybersurf.au" style="color:#00d2ff;">support@cybersurf.au</a>
+    </p>
+  </div>
+</body></html>"""
+
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = subject
+        msg["From"]    = f"CyberSurf Security <{FROM_EMAIL}>"
+        msg["To"]      = to_email
+        msg.attach(MIMEText(body_html, "html"))
+
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
+            server.starttls()
+            server.login(SMTP_USER, SMTP_PASS)
+            server.sendmail(FROM_EMAIL, to_email, msg.as_string())
+        return True, None
+    except Exception as e:
+        return False, str(e)
+
+
+def check_renewal_reminders():
+    """Send day 55 and day 60 renewal reminders for 2-month pack subscribers."""
+    if not DATABASE_URL:
+        return {"reminders_sent": 0, "errors": []}
+
+    summary = {"reminders_sent": 0, "errors": []}
+    try:
+        with get_db() as conn:
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                cur.execute("""
+                    SELECT * FROM subscribers
+                    WHERE plan = 'two_month' AND status = 'active'
+                    AND created_date IS NOT NULL
+                """)
+                subs = [dict(r) for r in cur.fetchall()]
+
+        today = datetime.now().date()
+        for sub in subs:
+            days = (today - sub["created_date"]).days
+
+            if days >= 55 and not sub["reminder_55_sent"]:
+                ok, err = send_renewal_reminder(sub["email"], sub["name"] or "there", 5)
+                if ok:
+                    with get_db() as conn:
+                        with conn.cursor() as cur:
+                            cur.execute("UPDATE subscribers SET reminder_55_sent = TRUE WHERE id = %s", (sub["id"],))
+                    summary["reminders_sent"] += 1
+                else:
+                    summary["errors"].append(f"day-55 email to {sub['email']}: {err}")
+
+            elif days >= 60 and not sub["reminder_60_sent"]:
+                ok, err = send_renewal_reminder(sub["email"], sub["name"] or "there", 0)
+                if ok:
+                    with get_db() as conn:
+                        with conn.cursor() as cur:
+                            cur.execute(
+                                "UPDATE subscribers SET reminder_60_sent = TRUE, status = 'expired' WHERE id = %s",
+                                (sub["id"],)
+                            )
+                    summary["reminders_sent"] += 1
+                else:
+                    summary["errors"].append(f"day-60 email to {sub['email']}: {err}")
+
+    except Exception as e:
+        summary["errors"].append(str(e))
+
+    return summary
+
+
 def breach_hash(results):
     """Stable hash of current breach state — changes only when new sources appear."""
     sources = sorted(
@@ -688,6 +804,10 @@ def run_monitoring():
 
         update_subscriber_check(sub["id"], new_hash)
         summary["checked"] += 1
+
+    renewal = check_renewal_reminders()
+    summary["renewal_reminders_sent"] = renewal["reminders_sent"]
+    summary["errors"] += renewal["errors"]
 
     return jsonify(summary), 200
 
@@ -762,6 +882,7 @@ def subscribe_monitoring():
     monitor_email1 = request.form.get("monitor_email1", "").strip().lower()
     monitor_email2 = request.form.get("monitor_email2", "").strip().lower()
     consent        = request.form.get("consent", "")
+    plan           = request.form.get("plan", "monthly")  # "monthly" or "two_month"
 
     if not name or not email or not monitor_email1:
         return "Name, contact email, and at least one email to monitor are required.", 400
@@ -769,24 +890,47 @@ def subscribe_monitoring():
     if consent != "yes":
         return "You must agree to the Terms of Service to continue.", 400
 
-    if not STRIPE_SECRET_KEY or not DWM_PRICE_ID:
+    if not STRIPE_SECRET_KEY:
         return "Subscription service is not configured yet.", 500
 
-    checkout_session = stripe.checkout.Session.create(
-        payment_method_types=["card"],
-        line_items=[{"price": DWM_PRICE_ID, "quantity": 1}],
-        mode="subscription",
-        customer_email=email,
-        metadata={
-            "product":         "dark_web_monitoring",
-            "customer_name":   name,
-            "email":           email,
-            "monitor_email1":  monitor_email1,
-            "monitor_email2":  monitor_email2,
-        },
-        success_url=f"{APP_BASE_URL}/subscribe-success",
-        cancel_url=f"{APP_BASE_URL}/dark-web-monitoring",
-    )
+    if plan == "two_month":
+        if not DWM_2MONTH_PRICE_ID:
+            return "2-month plan is not configured yet.", 500
+        checkout_session = stripe.checkout.Session.create(
+            payment_method_types=["card"],
+            line_items=[{"price": DWM_2MONTH_PRICE_ID, "quantity": 1}],
+            mode="payment",
+            customer_email=email,
+            metadata={
+                "product":        "dark_web_monitoring",
+                "plan":           "two_month",
+                "customer_name":  name,
+                "email":          email,
+                "monitor_email1": monitor_email1,
+                "monitor_email2": monitor_email2,
+            },
+            success_url=f"{APP_BASE_URL}/subscribe-success",
+            cancel_url=f"{APP_BASE_URL}/dark-web-monitoring",
+        )
+    else:
+        if not DWM_PRICE_ID:
+            return "Monthly plan is not configured yet.", 500
+        checkout_session = stripe.checkout.Session.create(
+            payment_method_types=["card"],
+            line_items=[{"price": DWM_PRICE_ID, "quantity": 1}],
+            mode="subscription",
+            customer_email=email,
+            metadata={
+                "product":        "dark_web_monitoring",
+                "plan":           "monthly",
+                "customer_name":  name,
+                "email":          email,
+                "monitor_email1": monitor_email1,
+                "monitor_email2": monitor_email2,
+            },
+            success_url=f"{APP_BASE_URL}/subscribe-success",
+            cancel_url=f"{APP_BASE_URL}/dark-web-monitoring",
+        )
     return redirect(checkout_session.url, code=303)
 
 
@@ -818,13 +962,15 @@ def webhook():
         meta = sess.get("metadata", {})
 
         if meta.get("product") == "dark_web_monitoring":
+            plan = meta.get("plan", "monthly")
             save_subscriber({
                 "name":                    meta.get("customer_name", ""),
                 "email":                   meta.get("email", ""),
                 "monitor_email1":          meta.get("monitor_email1", ""),
                 "monitor_email2":          meta.get("monitor_email2", "") or None,
-                "stripe_subscription_id":  sess.get("subscription"),
+                "stripe_subscription_id":  sess.get("subscription") or sess.get("id"),
                 "stripe_customer_id":      sess.get("customer"),
+                "plan":                    plan,
                 "created_at":              datetime.now().strftime("%d %b %Y %H:%M"),
             })
         else:
