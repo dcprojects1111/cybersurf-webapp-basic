@@ -78,6 +78,33 @@
   </div>
   {% endif %}
 
+  {% if subscribers %}
+  <div class="orders-section">
+    <div class="orders-title" style="color:rgba(0,210,100,.8);">&#9679; {{ subscribers|length }} Dark Web Monitoring Subscriber{{ 's' if subscribers|length != 1 }}</div>
+    {% for sub in subscribers %}
+    <div class="order-card" style="border-color:{% if sub.status == 'active' %}rgba(0,210,100,.3){% else %}rgba(255,255,255,.1){% endif %};">
+      <div class="order-info">
+        <div class="order-name">
+          {{ sub.name or 'Unknown' }}
+          <span style="font-size:11px;font-weight:700;margin-left:8px;padding:2px 8px;border-radius:10px;
+            {% if sub.status == 'active' %}background:rgba(0,210,100,.15);color:#00c864;{% else %}background:rgba(255,255,255,.07);color:rgba(252,253,242,.4);{% endif %}">
+            {{ sub.status|upper }}
+          </span>
+        </div>
+        <div class="order-meta">
+          Alert → {{ sub.email }}
+          &nbsp;·&nbsp; Monitoring: {{ sub.monitor_email1 }}{% if sub.monitor_email2 %}, {{ sub.monitor_email2 }}{% endif %}
+        </div>
+        <div class="order-meta" style="margin-top:3px;">
+          Subscribed {{ sub.created_at }}
+          {% if sub.last_checked %}&nbsp;·&nbsp; Last checked {{ sub.last_checked }}{% endif %}
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
   <div class="card">
     <div class="badge">Basic Breach Check — Internal Tool</div>
     <h1>Run a Breach Check</h1>

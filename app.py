@@ -7,13 +7,17 @@ Includes exposed credentials in report, delivered via pCloud secure link.
 
 import os
 import json
+import hashlib
+import smtplib
 import stripe
 import requests
 import psycopg2
 import psycopg2.extras
 from datetime import datetime
 from collections import defaultdict
-from flask import Flask, render_template, request, session, redirect, url_for
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from flask import Flask, render_template, request, session, redirect, url_for, jsonify
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("APP_SECRET", "change-this-in-production")
@@ -28,6 +32,17 @@ HIBP_API_KEY          = os.environ.get("HIBP_API_KEY", "")
 STRIPE_SECRET_KEY     = os.environ.get("STRIPE_SECRET_KEY", "")
 STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
 APP_BASE_URL          = os.environ.get("APP_BASE_URL", "https://cybersurf-webapp-basic.onrender.com")
+
+# Dark Web Monitoring
+DWM_PRICE_ID    = os.environ.get("DWM_PRICE_ID", "")       # Stripe recurring price ID
+MONITOR_SECRET  = os.environ.get("MONITOR_SECRET", "")     # Secret to protect /run-monitoring
+
+# Email alerts (SMTP)
+SMTP_HOST  = os.environ.get("SMTP_HOST", "smtp.gmail.com")
+SMTP_PORT  = int(os.environ.get("SMTP_PORT", "587"))
+SMTP_USER  = os.environ.get("SMTP_USER", "")
+SMTP_PASS  = os.environ.get("SMTP_PASS", "")
+FROM_EMAIL = os.environ.get("FROM_EMAIL", "noreply@cybersurf.au")
 
 if STRIPE_SECRET_KEY:
     stripe.api_key = STRIPE_SECRET_KEY
@@ -57,6 +72,21 @@ def init_db():
                     consent      TEXT,
                     consent_passwords TEXT,
                     consented_at TEXT
+                )
+            """)
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS subscribers (
+                    id                     SERIAL PRIMARY KEY,
+                    name                   TEXT,
+                    email                  TEXT NOT NULL,
+                    monitor_email1         TEXT NOT NULL,
+                    monitor_email2         TEXT,
+                    stripe_subscription_id TEXT UNIQUE,
+                    stripe_customer_id     TEXT,
+                    status                 TEXT DEFAULT 'active',
+                    created_at             TEXT,
+                    last_checked           TEXT,
+                    last_breach_hash       TEXT
                 )
             """)
 
@@ -469,6 +499,199 @@ def delete_order(session_id):
             cur.execute("DELETE FROM orders WHERE session_id = %s", (session_id,))
 
 
+# ─────────────────────────── Subscribers ──────────────────────────────────
+
+def save_subscriber(sub):
+    if not DATABASE_URL:
+        return
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                INSERT INTO subscribers
+                    (name, email, monitor_email1, monitor_email2,
+                     stripe_subscription_id, stripe_customer_id,
+                     status, created_at)
+                VALUES
+                    (%(name)s, %(email)s, %(monitor_email1)s, %(monitor_email2)s,
+                     %(stripe_subscription_id)s, %(stripe_customer_id)s,
+                     'active', %(created_at)s)
+                ON CONFLICT (stripe_subscription_id) DO NOTHING
+            """, sub)
+
+
+def load_subscribers():
+    if not DATABASE_URL:
+        return []
+    try:
+        with get_db() as conn:
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                cur.execute("SELECT * FROM subscribers ORDER BY created_at DESC")
+                return [dict(row) for row in cur.fetchall()]
+    except Exception:
+        return []
+
+
+def cancel_subscriber(stripe_subscription_id):
+    if not DATABASE_URL:
+        return
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE subscribers SET status = 'cancelled' WHERE stripe_subscription_id = %s",
+                (stripe_subscription_id,)
+            )
+
+
+def update_subscriber_check(sub_id, breach_hash):
+    if not DATABASE_URL:
+        return
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE subscribers SET last_checked = %s, last_breach_hash = %s WHERE id = %s",
+                (datetime.now().strftime("%d %b %Y %H:%M"), breach_hash, sub_id)
+            )
+
+
+# ─────────────────────────── Email Alert ──────────────────────────────────
+
+def send_breach_alert(to_email, name, new_sources):
+    if not SMTP_USER or not SMTP_PASS:
+        return False, "SMTP not configured"
+    try:
+        sources_html = "".join(
+            f'<li style="margin-bottom:6px;color:rgba(252,253,242,.8);">{s}</li>'
+            for s in new_sources
+        )
+        body_html = f"""<!DOCTYPE html>
+<html><head><meta charset="UTF-8"/></head>
+<body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;
+             background:#0a1628;color:#fcfdf2;padding:40px 20px;margin:0;">
+  <div style="max-width:520px;margin:0 auto;">
+    <div style="font-size:22px;font-weight:800;margin-bottom:4px;">
+      Cyber<span style="color:#00d2ff;">Surf</span> Security
+    </div>
+    <div style="font-size:12px;color:rgba(0,210,255,.7);letter-spacing:1px;
+                text-transform:uppercase;margin-bottom:28px;">Dark Web Monitoring Alert</div>
+
+    <div style="background:rgba(255,71,87,.1);border:1px solid rgba(255,71,87,.35);
+                border-radius:12px;padding:24px 28px;margin-bottom:24px;">
+      <div style="font-size:16px;font-weight:700;color:#ff4757;margin-bottom:8px;">
+        &#9888; New breach detected
+      </div>
+      <p style="font-size:14px;color:rgba(252,253,242,.75);line-height:1.6;margin:0;">
+        Hi {name}, your monthly Dark Web Monitoring check found your details
+        in a new data breach. Your information was found in:
+      </p>
+      <ul style="margin:14px 0 0 18px;font-size:14px;line-height:1.8;">
+        {sources_html}
+      </ul>
+    </div>
+
+    <div style="background:rgba(255,255,255,.04);border:1px solid rgba(0,210,255,.15);
+                border-radius:12px;padding:20px 24px;margin-bottom:24px;">
+      <p style="font-size:13px;font-weight:700;color:#00d2ff;
+                text-transform:uppercase;letter-spacing:1px;margin-bottom:12px;">
+        What to do right now
+      </p>
+      <ol style="margin:0 0 0 18px;font-size:13px;color:rgba(252,253,242,.7);
+                 line-height:1.9;padding:0;">
+        <li>Change your password on the affected account immediately</li>
+        <li>Change it on any other account using the same password</li>
+        <li>Enable two-factor authentication (2FA) on your email and banking</li>
+        <li>Check for suspicious login activity on your accounts</li>
+      </ol>
+    </div>
+
+    <p style="font-size:13px;color:rgba(252,253,242,.4);line-height:1.7;">
+      Need help? Reply to this email or contact
+      <a href="mailto:support@cybersurf.au" style="color:#00d2ff;">support@cybersurf.au</a><br/>
+      CyberSurf Security &nbsp;·&nbsp; Sunshine Coast, QLD
+    </p>
+  </div>
+</body></html>"""
+
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = "CyberSurf Alert — New breach detected on your account"
+        msg["From"]    = f"CyberSurf Security <{FROM_EMAIL}>"
+        msg["To"]      = to_email
+        msg.attach(MIMEText(body_html, "html"))
+
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
+            server.starttls()
+            server.login(SMTP_USER, SMTP_PASS)
+            server.sendmail(FROM_EMAIL, to_email, msg.as_string())
+        return True, None
+    except Exception as e:
+        return False, str(e)
+
+
+def breach_hash(results):
+    """Stable hash of current breach state — changes only when new sources appear."""
+    sources = sorted(
+        f"{email}:{source}"
+        for r in results
+        for source in r.get("breaches", {}).keys()
+    )
+    return hashlib.sha256("|".join(sources).encode()).hexdigest()
+
+
+# ─────────────────────────── Monitoring Run ───────────────────────────────
+
+@app.route("/run-monitoring")
+def run_monitoring():
+    secret = request.args.get("secret", "")
+    if not MONITOR_SECRET or secret != MONITOR_SECRET:
+        return jsonify({"error": "unauthorized"}), 401
+
+    subscribers = load_subscribers()
+    active = [s for s in subscribers if s["status"] == "active"]
+
+    summary = {"checked": 0, "alerts_sent": 0, "errors": []}
+
+    for sub in active:
+        emails = [e for e in [sub["monitor_email1"], sub["monitor_email2"]] if e]
+        results = []
+        try:
+            for email in emails:
+                data     = query_dehashed(email)
+                total    = data.get("total", 0)
+                entries  = data.get("entries") or []
+                breaches = process_entries(entries)
+                any_pw   = any(
+                    "password" in f or "hashed password" in f
+                    for info in breaches.values() for f in info["exposed_fields"]
+                )
+                risk, risk_desc = risk_level(total, any_pw)
+                results.append({"email": email, "total": total,
+                                 "breaches": breaches, "risk": (risk, risk_desc)})
+        except Exception as e:
+            summary["errors"].append(f"sub {sub['id']}: {e}")
+            continue
+
+        new_hash = breach_hash(results)
+        old_hash = sub.get("last_breach_hash") or ""
+
+        if old_hash and new_hash != old_hash:
+            # Find new sources since last check
+            old_sources = set(old_hash.split("|")) if old_hash else set()
+            new_sources = [
+                f"{r['email']} — {source}"
+                for r in results
+                for source in r["breaches"].keys()
+            ]
+            ok, err = send_breach_alert(sub["email"], sub["name"] or "there", new_sources)
+            if ok:
+                summary["alerts_sent"] += 1
+            else:
+                summary["errors"].append(f"email to {sub['email']}: {err}")
+
+        update_subscriber_check(sub["id"], new_hash)
+        summary["checked"] += 1
+
+    return jsonify(summary), 200
+
+
 # ─────────────────────────── Stripe ───────────────────────────────────────
 
 @app.route("/create-checkout", methods=["POST"])
@@ -527,6 +750,51 @@ def checkout_success():
     return render_template("success.html")
 
 
+@app.route("/dark-web-monitoring")
+def monitoring_page():
+    return render_template("monitoring.html")
+
+
+@app.route("/subscribe-monitoring", methods=["POST"])
+def subscribe_monitoring():
+    name           = request.form.get("name", "").strip()
+    email          = request.form.get("email", "").strip().lower()
+    monitor_email1 = request.form.get("monitor_email1", "").strip().lower()
+    monitor_email2 = request.form.get("monitor_email2", "").strip().lower()
+    consent        = request.form.get("consent", "")
+
+    if not name or not email or not monitor_email1:
+        return "Name, contact email, and at least one email to monitor are required.", 400
+
+    if consent != "yes":
+        return "You must agree to the Terms of Service to continue.", 400
+
+    if not STRIPE_SECRET_KEY or not DWM_PRICE_ID:
+        return "Subscription service is not configured yet.", 500
+
+    checkout_session = stripe.checkout.Session.create(
+        payment_method_types=["card"],
+        line_items=[{"price": DWM_PRICE_ID, "quantity": 1}],
+        mode="subscription",
+        customer_email=email,
+        metadata={
+            "product":         "dark_web_monitoring",
+            "customer_name":   name,
+            "email":           email,
+            "monitor_email1":  monitor_email1,
+            "monitor_email2":  monitor_email2,
+        },
+        success_url=f"{APP_BASE_URL}/subscribe-success",
+        cancel_url=f"{APP_BASE_URL}/dark-web-monitoring",
+    )
+    return redirect(checkout_session.url, code=303)
+
+
+@app.route("/subscribe-success")
+def subscribe_success():
+    return render_template("subscribe_success.html")
+
+
 @app.route("/webhook", methods=["POST"])
 def webhook():
     payload    = request.get_data()
@@ -543,21 +811,40 @@ def webhook():
         except Exception:
             return "", 400
 
-    if event.get("type") == "checkout.session.completed":
+    event_type = event.get("type")
+
+    if event_type == "checkout.session.completed":
         sess = event["data"]["object"]
         meta = sess.get("metadata", {})
-        save_order({
-            "session_id":          sess["id"],
-            "name":                meta.get("customer_name", "Unknown"),
-            "phone":               meta.get("phone", ""),
-            "email1":              meta.get("email1", ""),
-            "email2":              meta.get("email2", ""),
-            "paid_at":             datetime.now().strftime("%d %b %Y %H:%M"),
-            "amount":              f"${sess.get('amount_total', 3000) / 100:.2f} AUD",
-            "consent":             meta.get("consent", ""),
-            "consent_passwords":   meta.get("consent_passwords", ""),
-            "consented_at":        meta.get("consented_at", ""),
-        })
+
+        if meta.get("product") == "dark_web_monitoring":
+            save_subscriber({
+                "name":                    meta.get("customer_name", ""),
+                "email":                   meta.get("email", ""),
+                "monitor_email1":          meta.get("monitor_email1", ""),
+                "monitor_email2":          meta.get("monitor_email2", "") or None,
+                "stripe_subscription_id":  sess.get("subscription"),
+                "stripe_customer_id":      sess.get("customer"),
+                "created_at":              datetime.now().strftime("%d %b %Y %H:%M"),
+            })
+        else:
+            save_order({
+                "session_id":          sess["id"],
+                "name":                meta.get("customer_name", "Unknown"),
+                "phone":               meta.get("phone", ""),
+                "email1":              meta.get("email1", ""),
+                "email2":              meta.get("email2", ""),
+                "paid_at":             datetime.now().strftime("%d %b %Y %H:%M"),
+                "amount":              f"${sess.get('amount_total', 3000) / 100:.2f} AUD",
+                "consent":             meta.get("consent", ""),
+                "consent_passwords":   meta.get("consent_passwords", ""),
+                "consented_at":        meta.get("consented_at", ""),
+            })
+
+    elif event_type == "customer.subscription.deleted":
+        sub_id = event["data"]["object"].get("id")
+        if sub_id:
+            cancel_subscriber(sub_id)
 
     return "", 200
 
@@ -576,7 +863,7 @@ def complete_order(session_id):
 def index():
     auth = require_auth()
     if auth: return auth
-    return render_template("index.html", pending_orders=load_orders())
+    return render_template("index.html", pending_orders=load_orders(), subscribers=load_subscribers())
 
 
 @app.route("/run-check", methods=["POST"])
