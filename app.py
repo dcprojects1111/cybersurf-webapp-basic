@@ -34,9 +34,12 @@ STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
 APP_BASE_URL          = os.environ.get("APP_BASE_URL", "https://cybersurf-webapp-basic.onrender.com")
 
 # Dark Web Monitoring
-DWM_PRICE_ID       = os.environ.get("DWM_PRICE_ID", "")        # Stripe recurring price ID ($15/mo)
+DWM_PRICE_ID        = os.environ.get("DWM_PRICE_ID", "")        # Stripe recurring price ID ($15/mo)
 DWM_2MONTH_PRICE_ID = "price_1TLKpjBMlmXoVl2K53kWW4Kg"         # Stripe one-time price ID ($30 / 2 months)
-MONITOR_SECRET     = os.environ.get("MONITOR_SECRET", "")      # Secret to protect /run-monitoring
+MONITOR_SECRET      = os.environ.get("MONITOR_SECRET", "")     # Secret to protect /run-monitoring
+
+# Bookable Services
+TFA_PRICE_ID        = os.environ.get("TFA_PRICE_ID", "")        # 2FA Activation Service — $49
 
 # Email alerts (SMTP)
 SMTP_HOST  = os.environ.get("SMTP_HOST", "smtp.gmail.com")
@@ -73,6 +76,19 @@ def init_db():
                     consent      TEXT,
                     consent_passwords TEXT,
                     consented_at TEXT
+                )
+            """)
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS service_bookings (
+                    id         SERIAL PRIMARY KEY,
+                    session_id TEXT UNIQUE,
+                    service    TEXT,
+                    name       TEXT,
+                    email      TEXT,
+                    phone      TEXT,
+                    paid_at    TEXT,
+                    amount     TEXT,
+                    status     TEXT DEFAULT 'pending'
                 )
             """)
             cur.execute("""
@@ -558,6 +574,124 @@ def update_subscriber_check(sub_id, breach_hash):
             )
 
 
+# ─────────────────────────── Service Bookings ─────────────────────────────
+
+def save_service_booking(booking):
+    if not DATABASE_URL:
+        return
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                INSERT INTO service_bookings
+                    (session_id, service, name, email, phone, paid_at, amount)
+                VALUES
+                    (%(session_id)s, %(service)s, %(name)s, %(email)s,
+                     %(phone)s, %(paid_at)s, %(amount)s)
+                ON CONFLICT (session_id) DO NOTHING
+            """, booking)
+
+
+def load_service_bookings():
+    if not DATABASE_URL:
+        return []
+    try:
+        with get_db() as conn:
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                cur.execute("SELECT * FROM service_bookings WHERE status = 'pending' ORDER BY paid_at DESC")
+                return [dict(row) for row in cur.fetchall()]
+    except Exception:
+        return []
+
+
+def complete_service_booking(booking_id):
+    if not DATABASE_URL:
+        return
+    with get_db() as conn:
+        with conn.cursor() as cur:
+            cur.execute("UPDATE service_bookings SET status = 'completed' WHERE id = %s", (booking_id,))
+
+
+def send_booking_confirmation(to_email, name, service_name, cal_link, price):
+    if not SMTP_USER or not SMTP_PASS:
+        return False, "SMTP not configured"
+    try:
+        body_html = f"""<!DOCTYPE html>
+<html><head><meta charset="UTF-8"/></head>
+<body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;
+             background:#0a1628;color:#fcfdf2;padding:40px 20px;margin:0;">
+  <div style="max-width:520px;margin:0 auto;">
+    <div style="font-size:22px;font-weight:800;margin-bottom:4px;">
+      Cyber<span style="color:#00d2ff;">Surf</span> Security
+    </div>
+    <div style="font-size:12px;color:rgba(0,210,255,.7);letter-spacing:1px;
+                text-transform:uppercase;margin-bottom:28px;">Booking Confirmation</div>
+
+    <div style="background:rgba(0,210,100,.06);border:1px solid rgba(0,210,100,.3);
+                border-radius:12px;padding:24px 28px;margin-bottom:24px;">
+      <div style="font-size:16px;font-weight:700;color:#fcfdf2;margin-bottom:8px;">
+        &#10003; Payment received — you're booked in
+      </div>
+      <p style="font-size:14px;color:rgba(252,253,242,.75);line-height:1.6;margin:0 0 6px;">
+        Hi {name}, your payment of <strong>{price}</strong> for
+        <strong>{service_name}</strong> has been received.
+      </p>
+      <p style="font-size:14px;color:rgba(252,253,242,.75);line-height:1.6;margin:0 0 20px;">
+        Click below to choose your session time — pick whatever works best for you.
+      </p>
+      <a href="{cal_link}"
+         style="display:inline-block;background:linear-gradient(135deg,#00d2ff 0%,#0077be 100%);
+                color:#fff;font-weight:800;font-size:14px;padding:12px 28px;
+                border-radius:8px;text-decoration:none;">
+        Choose your session time &rarr;
+      </a>
+    </div>
+
+    <div style="background:rgba(255,255,255,.04);border:1px solid rgba(0,210,255,.15);
+                border-radius:12px;padding:20px 24px;margin-bottom:24px;">
+      <p style="font-size:13px;font-weight:700;color:#00d2ff;
+                text-transform:uppercase;letter-spacing:1px;margin-bottom:12px;">
+        What happens next
+      </p>
+      <ol style="margin:0 0 0 18px;font-size:13px;color:rgba(252,253,242,.7);
+                 line-height:1.9;padding:0;">
+        <li>Click the link above and pick a time that suits you</li>
+        <li>You'll receive a calendar invite with the Zoom link</li>
+        <li>Darryl will run your session at the scheduled time</li>
+      </ol>
+    </div>
+
+    <div style="background:rgba(255,165,0,.06);border:1px solid rgba(255,165,0,.2);
+                border-radius:10px;padding:14px 18px;margin-bottom:24px;
+                font-size:12px;color:rgba(252,253,242,.6);line-height:1.7;">
+      <strong style="color:#ffa500;">Cancellation policy:</strong>
+      Cancel 48+ hours before — full refund.
+      Cancel 24–48 hours — 50% refund or reschedule credit.
+      Cancel under 24 hours / no-show — no refund, credit valid 60 days.
+    </div>
+
+    <p style="font-size:13px;color:rgba(252,253,242,.4);line-height:1.7;">
+      Questions? Reply to this email or contact
+      <a href="mailto:support@cybersurf.au" style="color:#00d2ff;">support@cybersurf.au</a><br/>
+      CyberSurf Security &nbsp;·&nbsp; Sunshine Coast, QLD
+    </p>
+  </div>
+</body></html>"""
+
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = f"CyberSurf — {service_name} booking confirmed"
+        msg["From"]    = f"CyberSurf Security <{FROM_EMAIL}>"
+        msg["To"]      = to_email
+        msg.attach(MIMEText(body_html, "html"))
+
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
+            server.starttls()
+            server.login(SMTP_USER, SMTP_PASS)
+            server.sendmail(FROM_EMAIL, to_email, msg.as_string())
+        return True, None
+    except Exception as e:
+        return False, str(e)
+
+
 # ─────────────────────────── Email Alert ──────────────────────────────────
 
 def send_breach_alert(to_email, name, new_sources):
@@ -939,6 +1073,47 @@ def subscribe_success():
     return render_template("subscribe_success.html")
 
 
+# ─────────────────────────── 2FA Activation Service ───────────────────────
+
+@app.route("/book-2fa")
+def book_2fa():
+    return render_template("book_2fa.html")
+
+
+@app.route("/checkout-2fa", methods=["POST"])
+def checkout_2fa():
+    name  = request.form.get("name", "").strip()
+    email = request.form.get("email", "").strip()
+    phone = request.form.get("phone", "").strip()
+
+    if not name or not email:
+        return render_template("book_2fa.html", error="Name and email are required.")
+
+    if not TFA_PRICE_ID:
+        return "2FA Activation Service is not configured yet.", 500
+
+    checkout_session = stripe.checkout.Session.create(
+        payment_method_types=["card"],
+        line_items=[{"price": TFA_PRICE_ID, "quantity": 1}],
+        mode="payment",
+        customer_email=email,
+        metadata={
+            "product":       "2fa_service",
+            "customer_name": name,
+            "email":         email,
+            "phone":         phone,
+        },
+        success_url=f"{APP_BASE_URL}/book-2fa-success",
+        cancel_url=f"{APP_BASE_URL}/book-2fa",
+    )
+    return redirect(checkout_session.url, code=303)
+
+
+@app.route("/book-2fa-success")
+def book_2fa_success():
+    return render_template("book_2fa_success.html")
+
+
 @app.route("/webhook", methods=["POST"])
 def webhook():
     payload    = request.get_data()
@@ -973,6 +1148,25 @@ def webhook():
                 "plan":                    plan,
                 "created_at":              datetime.now().strftime("%d %b %Y %H:%M"),
             })
+        elif meta.get("product") == "2fa_service":
+            name  = meta.get("customer_name", "")
+            email = meta.get("email", "")
+            save_service_booking({
+                "session_id": sess["id"],
+                "service":    "2FA Activation",
+                "name":       name,
+                "email":      email,
+                "phone":      meta.get("phone", ""),
+                "paid_at":    datetime.now().strftime("%d %b %Y %H:%M"),
+                "amount":     f"${sess.get('amount_total', 4900) / 100:.2f} AUD",
+            })
+            send_booking_confirmation(
+                to_email     = email,
+                name         = name,
+                service_name = "2FA Activation Service",
+                cal_link     = "https://cal.com/cybersurf/2fa-activation",
+                price        = "$49",
+            )
         else:
             save_order({
                 "session_id":          sess["id"],
@@ -1009,7 +1203,7 @@ def complete_order(session_id):
 def index():
     auth = require_auth()
     if auth: return auth
-    return render_template("index.html", pending_orders=load_orders(), subscribers=load_subscribers())
+    return render_template("index.html", pending_orders=load_orders(), subscribers=load_subscribers(), service_bookings=load_service_bookings())
 
 
 @app.route("/run-check", methods=["POST"])
