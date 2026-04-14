@@ -39,7 +39,8 @@ DWM_2MONTH_PRICE_ID = "price_1TLKpjBMlmXoVl2K53kWW4Kg"         # Stripe one-time
 MONITOR_SECRET      = os.environ.get("MONITOR_SECRET", "")     # Secret to protect /run-monitoring
 
 # Bookable Services
-TFA_PRICE_ID        = os.environ.get("TFA_PRICE_ID", "")        # 2FA Activation Service — $49
+TFA_PRICE_ID         = os.environ.get("TFA_PRICE_ID", "")        # 2FA Activation Service — $49
+LOCK_CHANGE_PRICE_ID = os.environ.get("LOCK_CHANGE_PRICE_ID", "") # Lock Change Session — $79
 
 # Email alerts (SMTP)
 SMTP_HOST  = os.environ.get("SMTP_HOST", "smtp.gmail.com")
@@ -1140,6 +1141,45 @@ def book_2fa_success():
     return render_template("book_2fa_success.html")
 
 
+@app.route("/book-lock-change")
+def book_lock_change():
+    return render_template("book_lock_change.html")
+
+
+@app.route("/checkout-lock-change", methods=["POST"])
+def checkout_lock_change():
+    name  = request.form.get("name", "").strip()
+    email = request.form.get("email", "").strip()
+    phone = request.form.get("phone", "").strip()
+
+    if not name or not email:
+        return render_template("book_lock_change.html", error="Name and email are required.")
+
+    if not LOCK_CHANGE_PRICE_ID:
+        return "Lock Change is not configured yet.", 500
+
+    checkout_session = stripe.checkout.Session.create(
+        payment_method_types=["card"],
+        line_items=[{"price": LOCK_CHANGE_PRICE_ID, "quantity": 1}],
+        mode="payment",
+        customer_email=email,
+        metadata={
+            "product":       "lock_change",
+            "customer_name": name,
+            "email":         email,
+            "phone":         phone,
+        },
+        success_url=f"{APP_BASE_URL}/book-lock-change-success",
+        cancel_url=f"{APP_BASE_URL}/book-lock-change",
+    )
+    return redirect(checkout_session.url, code=303)
+
+
+@app.route("/book-lock-change-success")
+def book_lock_change_success():
+    return render_template("book_lock_change_success.html")
+
+
 @app.route("/webhook", methods=["POST"])
 def webhook():
     payload    = request.get_data()
@@ -1192,6 +1232,25 @@ def webhook():
                 service_name = "2FA Activation Service",
                 cal_link     = "https://cal.com/cybersurf/2fa-activation",
                 price        = "$49",
+            )
+        elif meta.get("product") == "lock_change":
+            name  = meta.get("customer_name", "")
+            email = meta.get("email", "")
+            save_service_booking({
+                "session_id": sess["id"],
+                "service":    "Lock Change",
+                "name":       name,
+                "email":      email,
+                "phone":      meta.get("phone", ""),
+                "paid_at":    datetime.now().strftime("%d %b %Y %H:%M"),
+                "amount":     f"${sess.get('amount_total', 7900) / 100:.2f} AUD",
+            })
+            send_booking_confirmation(
+                to_email     = email,
+                name         = name,
+                service_name = "Lock Change Session",
+                cal_link     = "https://cal.com/cybersurf/lock-change",
+                price        = "$79",
             )
         else:
             save_order({
