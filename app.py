@@ -163,7 +163,14 @@ def require_auth():
 
 # ─────────────────────────── Dehashed ─────────────────────────────────────
 
+class DehashedUnavailable(Exception):
+    """Raised when Dehashed API key is missing or subscription has lapsed."""
+    pass
+
+
 def query_dehashed(email):
+    if not DEHASHED_API_KEY:
+        raise DehashedUnavailable("No Dehashed API key configured.")
     headers = {
         "Content-Type":     "application/json",
         "DeHashed-Api-Key": DEHASHED_API_KEY,
@@ -177,6 +184,8 @@ def query_dehashed(email):
         "de_dupe":  True,
     }
     resp = requests.post(DEHASHED_URL, json=payload, headers=headers, timeout=15)
+    if resp.status_code in (401, 402, 403):
+        raise DehashedUnavailable(f"Dehashed subscription inactive or key invalid (HTTP {resp.status_code}).")
     resp.raise_for_status()
     return resp.json()
 
@@ -274,7 +283,7 @@ def _e(s):
     return str(s).replace("&","&amp;").replace("<","&lt;").replace(">","&gt;").replace('"',"&quot;")
 
 
-def build_report_html(customer_name, results):
+def build_report_html(customer_name, results, dehashed_unavailable=False):
     now = datetime.now().strftime("%d %B %Y %H:%M AEST")
 
     risk_colours = {
@@ -422,6 +431,15 @@ def build_report_html(customer_name, results):
     This report was prepared with your explicit consent and contains personal credential data found in known data breach databases.
     <strong style="color:#fcfdf2;">Do not share this report.</strong> Delete it after you have reviewed it and changed any exposed passwords.
   </div>
+
+  {"" if not dehashed_unavailable else '''
+  <!-- Dehashed fallback notice -->
+  <div style="background:rgba(0,119,190,.08);border:1px solid rgba(0,119,190,.35);border-radius:10px;padding:16px 20px;margin-bottom:24px;font-size:13px;color:rgba(252,253,242,.75);line-height:1.7;">
+    <strong style="color:#00d2ff;">&#8505; Data Source Notice</strong><br/>
+    Credential database (Dehashed) is currently unavailable. This report is based on <strong style="color:#fcfdf2;">publicly verified breach records only (HIBP)</strong> — exposed passwords are not included.
+    The breach list below shows known data exposure events for this email address. For a full credential report including exposed passwords, please request a new check when the service is restored.
+  </div>
+  '''}
 
   <!-- Email result cards -->
   {cards_html}
@@ -915,6 +933,9 @@ def run_monitoring():
                 risk, risk_desc = risk_level(total, any_pw)
                 results.append({"email": email, "total": total,
                                  "breaches": breaches, "risk": (risk, risk_desc)})
+        except DehashedUnavailable:
+            summary["dehashed_skipped"] = True
+            continue
         except Exception as e:
             summary["errors"].append(f"sub {sub['id']}: {e}")
             continue
@@ -1221,35 +1242,42 @@ def run_check():
     emails  = [e for e in [email1, email2] if e]
     results = []
     balance = None
+    dehashed_unavailable = False
 
-    try:
-        for email in emails:
+    for email in emails:
+        # Try Dehashed — fall back to HIBP-only if subscription is inactive
+        try:
             data     = query_dehashed(email)
             balance  = data.get("balance")
             total    = data.get("total", 0)
             entries  = data.get("entries") or []
             breaches = process_entries(entries)
-            any_pw   = any(
-                "password" in f or "hashed password" in f
-                for info in breaches.values() for f in info["exposed_fields"]
-            )
-            risk, risk_desc = risk_level(total, any_pw)
+        except DehashedUnavailable:
+            dehashed_unavailable = True
+            total    = 0
+            breaches = {}
+        except Exception as e:
+            return render_template("index.html", error=f"Dehashed API error: {e}")
 
-            # HIBP verified breach list (runs independently — failure is non-fatal)
-            hibp_breaches = query_hibp(email)
+        any_pw = any(
+            "password" in f or "hashed password" in f
+            for info in breaches.values() for f in info["exposed_fields"]
+        )
+        risk, risk_desc = risk_level(total, any_pw)
 
-            results.append({
-                "email":        email,
-                "total":        total,
-                "breaches":     breaches,
-                "risk":         (risk, risk_desc),
-                "hibp":         hibp_breaches,   # list, [], or None
-            })
-    except Exception as e:
-        return render_template("index.html", error=f"Dehashed API error: {e}")
+        # HIBP verified breach list (runs independently — failure is non-fatal)
+        hibp_breaches = query_hibp(email)
+
+        results.append({
+            "email":        email,
+            "total":        total,
+            "breaches":     breaches,
+            "risk":         (risk, risk_desc),
+            "hibp":         hibp_breaches,   # list, [], or None
+        })
 
     # Build report
-    report_text = build_report_html(customer_name, results)
+    report_text = build_report_html(customer_name, results, dehashed_unavailable=dehashed_unavailable)
     safe_name   = customer_name.replace(" ", "_")
     date_str    = datetime.now().strftime("%Y-%m-%d_%H%M")
     filename    = f"{safe_name}_{date_str}.html"
@@ -1264,14 +1292,15 @@ def run_check():
         share_link, link_error = get_pcloud_share_link(file_path)
 
     return render_template("report.html",
-        customer_name = customer_name,
-        results       = results,
-        filename      = filename,
-        uploaded      = uploaded,
-        pcloud_error  = pcloud_error,
-        share_link    = share_link,
-        link_error    = link_error,
-        balance       = balance,
+        customer_name        = customer_name,
+        results              = results,
+        filename             = filename,
+        uploaded             = uploaded,
+        pcloud_error         = pcloud_error,
+        share_link           = share_link,
+        link_error           = link_error,
+        balance              = balance,
+        dehashed_unavailable = dehashed_unavailable,
     )
 
 
