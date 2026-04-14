@@ -1103,12 +1103,16 @@ def book_2fa():
 
 @app.route("/checkout-2fa", methods=["POST"])
 def checkout_2fa():
-    name  = request.form.get("name", "").strip()
-    email = request.form.get("email", "").strip()
-    phone = request.form.get("phone", "").strip()
+    name         = request.form.get("name", "").strip()
+    email        = request.form.get("email", "").strip()
+    phone        = request.form.get("phone", "").strip()
+    session_type = request.form.get("session_type", "").strip()
 
     if not name or not email:
         return render_template("book_2fa.html", error="Name and email are required.")
+
+    if not session_type:
+        return render_template("book_2fa.html", error="Please select online or in-person.")
 
     if not TFA_PRICE_ID:
         return "2FA Activation Service is not configured yet.", 500
@@ -1123,6 +1127,7 @@ def checkout_2fa():
             "customer_name": name,
             "email":         email,
             "phone":         phone,
+            "session_type":  session_type,
         },
         success_url=f"{APP_BASE_URL}/book-2fa-success",
         cancel_url=f"{APP_BASE_URL}/book-2fa",
