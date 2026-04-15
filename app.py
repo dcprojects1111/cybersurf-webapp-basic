@@ -648,7 +648,7 @@ def complete_service_booking(booking_id):
             cur.execute("UPDATE service_bookings SET status = 'completed' WHERE id = %s", (booking_id,))
 
 
-def send_booking_confirmation(to_email, name, service_name, cal_link, price, free=False, upsell_note=None):
+def send_booking_confirmation(to_email, name, service_name, cal_link, price, free=False, upsell_note=None, upsell_title=None):
     if not SMTP_USER or not SMTP_PASS:
         return False, "SMTP not configured"
     try:
@@ -711,7 +711,7 @@ def send_booking_confirmation(to_email, name, service_name, cal_link, price, fre
     {f'''<div style="background:rgba(255,200,0,.06);border:1px solid rgba(255,200,0,.2);
                 border-radius:10px;padding:16px 20px;margin-bottom:24px;">
       <p style="font-size:13px;font-weight:700;color:#ffd200;margin-bottom:8px;">
-        Want us to fix anything we find on the day?
+        {upsell_title or "Want us to fix anything we find on the day?"}
       </p>
       <p style="font-size:13px;color:rgba(252,253,242,.7);line-height:1.7;margin:0;">
         {upsell_note}
@@ -1453,7 +1453,7 @@ def webhook():
                 service_name = service_label,
                 cal_link     = "https://cal.com/cybersurf/home-security-scan",
                 price        = price_label,
-                upsell_note  = "We can stay an extra 90 minutes after the scan and fix everything we find — malware removed, ports closed, router locked down — before we leave. $149, payable on the day. Just reply to this email to let us know and we'll block the time.",
+                upsell_note  = "If we find malware or vulnerabilities, we can fix everything before we leave — $149, payable on the day. Or next time, consider the Complete Home Security Check ($299) which includes the Fix Session free. Just reply to this email to add it on.",
             )
         elif meta.get("product") == "home_scan_bundle":
             name  = meta.get("customer_name", "")
@@ -1470,9 +1470,11 @@ def webhook():
             send_booking_confirmation(
                 to_email     = email,
                 name         = name,
-                service_name = "Home Security Scan Bundle",
+                service_name = "Complete Home Security Check",
                 cal_link     = "https://cal.com/cybersurf/home-security-scan",
                 price        = "$299",
+                upsell_title = "Your Fix Session is included free.",
+                upsell_note  = "After your in-person scan, if we find malware or vulnerabilities, we fix everything before we leave — same day, no extra charge. We'll send you the Fix Session booking link once your scan is confirmed.",
             )
         else:
             save_order({
