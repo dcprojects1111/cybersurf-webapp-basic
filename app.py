@@ -648,7 +648,7 @@ def complete_service_booking(booking_id):
             cur.execute("UPDATE service_bookings SET status = 'completed' WHERE id = %s", (booking_id,))
 
 
-def send_booking_confirmation(to_email, name, service_name, cal_link, price, free=False):
+def send_booking_confirmation(to_email, name, service_name, cal_link, price, free=False, upsell_note=None):
     if not SMTP_USER or not SMTP_PASS:
         return False, "SMTP not configured"
     try:
@@ -707,6 +707,16 @@ def send_booking_confirmation(to_email, name, service_name, cal_link, price, fre
         <li>Darryl will run your session at the scheduled time</li>
       </ol>
     </div>
+
+    {f'''<div style="background:rgba(255,200,0,.06);border:1px solid rgba(255,200,0,.2);
+                border-radius:10px;padding:16px 20px;margin-bottom:24px;">
+      <p style="font-size:13px;font-weight:700;color:#ffd200;margin-bottom:8px;">
+        Want us to fix anything we find on the day?
+      </p>
+      <p style="font-size:13px;color:rgba(252,253,242,.7);line-height:1.7;margin:0;">
+        {upsell_note}
+      </p>
+    </div>''' if upsell_note else ""}
 
     {"" if free else '''<div style="background:rgba(255,165,0,.06);border:1px solid rgba(255,165,0,.2);
                 border-radius:10px;padding:14px 18px;margin-bottom:24px;
@@ -1443,6 +1453,7 @@ def webhook():
                 service_name = service_label,
                 cal_link     = "https://cal.com/cybersurf/home-security-scan",
                 price        = price_label,
+                upsell_note  = "We can stay an extra 90 minutes after the scan and fix everything we find — malware removed, ports closed, router locked down — before we leave. $149, payable on the day. Just reply to this email to let us know and we'll block the time.",
             )
         elif meta.get("product") == "home_scan_bundle":
             name  = meta.get("customer_name", "")
