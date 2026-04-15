@@ -39,8 +39,14 @@ DWM_2MONTH_PRICE_ID = "price_1TLKpjBMlmXoVl2K53kWW4Kg"         # Stripe one-time
 MONITOR_SECRET      = os.environ.get("MONITOR_SECRET", "")     # Secret to protect /run-monitoring
 
 # Bookable Services
-TFA_PRICE_ID         = os.environ.get("TFA_PRICE_ID", "")        # 2FA Activation Service — $49
-LOCK_CHANGE_PRICE_ID = os.environ.get("LOCK_CHANGE_PRICE_ID", "") # Lock Change Session — $79
+TFA_PRICE_ID                  = os.environ.get("TFA_PRICE_ID", "")                  # 2FA Activation Service — $49
+LOCK_CHANGE_PRICE_ID          = os.environ.get("LOCK_CHANGE_PRICE_ID", "")          # Lock Change Session — $79
+HOME_SCAN_PRICE_ID            = os.environ.get("HOME_SCAN_PRICE_ID", "")            # Home Security Scan — $229 (3 devices)
+HOME_SCAN_EXTENDED_PRICE_ID   = os.environ.get("HOME_SCAN_EXTENDED_PRICE_ID", "")  # Home Security Scan — $269 (6 devices)
+HOME_SCAN_BUNDLE_PRICE_ID     = os.environ.get("HOME_SCAN_BUNDLE_PRICE_ID", "")    # Complete Home Security Check — $299
+
+# Fix Session launch offer
+FREE_FIX_SLOTS = int(os.environ.get("FREE_FIX_SLOTS", "7"))
 
 # Email alerts (SMTP)
 SMTP_HOST  = os.environ.get("SMTP_HOST", "smtp.gmail.com")
@@ -622,6 +628,18 @@ def load_service_bookings():
         return []
 
 
+def count_fix_bookings():
+    if not DATABASE_URL:
+        return 0
+    try:
+        with get_db() as conn:
+            with conn.cursor() as cur:
+                cur.execute("SELECT COUNT(*) FROM service_bookings WHERE service = 'fix_session'")
+                return cur.fetchone()[0]
+    except Exception:
+        return 0
+
+
 def complete_service_booking(booking_id):
     if not DATABASE_URL:
         return
@@ -630,10 +648,22 @@ def complete_service_booking(booking_id):
             cur.execute("UPDATE service_bookings SET status = 'completed' WHERE id = %s", (booking_id,))
 
 
-def send_booking_confirmation(to_email, name, service_name, cal_link, price):
+def send_booking_confirmation(to_email, name, service_name, cal_link, price, free=False):
     if not SMTP_USER or not SMTP_PASS:
         return False, "SMTP not configured"
     try:
+        if free:
+            confirm_header = "&#10003; Spot secured — you're in for free"
+            confirm_body   = (
+                f"Hi {name}, your free spot for <strong>{service_name}</strong> is confirmed. "
+                f"No payment required — just choose your session time below."
+            )
+        else:
+            confirm_header = "&#10003; Payment received — you're booked in"
+            confirm_body   = (
+                f"Hi {name}, your payment of <strong>{price}</strong> for "
+                f"<strong>{service_name}</strong> has been received."
+            )
         body_html = f"""<!DOCTYPE html>
 <html><head><meta charset="UTF-8"/></head>
 <body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;
@@ -648,11 +678,10 @@ def send_booking_confirmation(to_email, name, service_name, cal_link, price):
     <div style="background:rgba(0,210,100,.06);border:1px solid rgba(0,210,100,.3);
                 border-radius:12px;padding:24px 28px;margin-bottom:24px;">
       <div style="font-size:16px;font-weight:700;color:#fcfdf2;margin-bottom:8px;">
-        &#10003; Payment received — you're booked in
+        {confirm_header}
       </div>
       <p style="font-size:14px;color:rgba(252,253,242,.75);line-height:1.6;margin:0 0 6px;">
-        Hi {name}, your payment of <strong>{price}</strong> for
-        <strong>{service_name}</strong> has been received.
+        {confirm_body}
       </p>
       <p style="font-size:14px;color:rgba(252,253,242,.75);line-height:1.6;margin:0 0 20px;">
         Click below to choose your session time — pick whatever works best for you.
@@ -679,14 +708,14 @@ def send_booking_confirmation(to_email, name, service_name, cal_link, price):
       </ol>
     </div>
 
-    <div style="background:rgba(255,165,0,.06);border:1px solid rgba(255,165,0,.2);
+    {"" if free else '''<div style="background:rgba(255,165,0,.06);border:1px solid rgba(255,165,0,.2);
                 border-radius:10px;padding:14px 18px;margin-bottom:24px;
                 font-size:12px;color:rgba(252,253,242,.6);line-height:1.7;">
       <strong style="color:#ffa500;">Cancellation policy:</strong>
       Cancel 48+ hours before — full refund.
       Cancel 24–48 hours — 50% refund or reschedule credit.
       Cancel under 24 hours / no-show — no refund, credit valid 60 days.
-    </div>
+    </div>'''}
 
     <p style="font-size:13px;color:rgba(252,253,242,.4);line-height:1.7;">
       Questions? Reply to this email or contact
@@ -1180,6 +1209,147 @@ def book_lock_change_success():
     return render_template("book_lock_change_success.html")
 
 
+@app.route("/book-home-scan")
+def book_home_scan():
+    tier = request.args.get("tier", "standard")
+    return render_template("book_home_scan.html", preselected_tier=tier)
+
+
+@app.route("/checkout-home-scan", methods=["POST"])
+def checkout_home_scan():
+    name       = request.form.get("name", "").strip()
+    email      = request.form.get("email", "").strip()
+    phone      = request.form.get("phone", "").strip()
+    device_tier = request.form.get("device_tier", "standard").strip()  # "standard" or "extended"
+
+    if not name or not email:
+        return render_template("book_home_scan.html", error="Name and email are required.")
+
+    if device_tier == "extended":
+        price_id = HOME_SCAN_EXTENDED_PRICE_ID
+        if not price_id:
+            return "Home Security Scan (extended) is not configured yet.", 500
+        price_label = "$269"
+    else:
+        price_id = HOME_SCAN_PRICE_ID
+        if not price_id:
+            return "Home Security Scan is not configured yet.", 500
+        price_label = "$229"
+
+    checkout_session = stripe.checkout.Session.create(
+        line_items=[{"price": price_id, "quantity": 1}],
+        mode="payment",
+        customer_email=email,
+        metadata={
+            "product":       "home_scan",
+            "customer_name": name,
+            "email":         email,
+            "phone":         phone,
+            "device_tier":   device_tier,
+            "price_label":   price_label,
+        },
+        success_url=f"{APP_BASE_URL}/book-home-scan-success",
+        cancel_url=f"{APP_BASE_URL}/book-home-scan",
+    )
+    return redirect(checkout_session.url, code=303)
+
+
+@app.route("/book-home-scan-success")
+def book_home_scan_success():
+    return render_template("book_home_scan_success.html")
+
+
+@app.route("/book-home-scan-bundle")
+def book_home_scan_bundle():
+    return render_template("book_home_scan_bundle.html")
+
+
+@app.route("/checkout-home-scan-bundle", methods=["POST"])
+def checkout_home_scan_bundle():
+    name  = request.form.get("name", "").strip()
+    email = request.form.get("email", "").strip()
+    phone = request.form.get("phone", "").strip()
+
+    if not name or not email:
+        return render_template("book_home_scan_bundle.html", error="Name and email are required.")
+
+    if not HOME_SCAN_BUNDLE_PRICE_ID:
+        return "Home Security Scan Bundle is not configured yet.", 500
+
+    checkout_session = stripe.checkout.Session.create(
+        line_items=[{"price": HOME_SCAN_BUNDLE_PRICE_ID, "quantity": 1}],
+        mode="payment",
+        customer_email=email,
+        metadata={
+            "product":       "home_scan_bundle",
+            "customer_name": name,
+            "email":         email,
+            "phone":         phone,
+        },
+        success_url=f"{APP_BASE_URL}/book-home-scan-bundle-success",
+        cancel_url=f"{APP_BASE_URL}/book-home-scan-bundle",
+    )
+    return redirect(checkout_session.url, code=303)
+
+
+@app.route("/book-home-scan-bundle-success")
+def book_home_scan_bundle_success():
+    return render_template("book_home_scan_bundle_success.html")
+
+
+@app.route("/book-fix-session")
+def book_fix_session():
+    used = count_fix_bookings()
+    remaining = max(0, FREE_FIX_SLOTS - used)
+    return render_template("book_fix_session.html", spots_remaining=remaining, total_spots=FREE_FIX_SLOTS)
+
+
+@app.route("/checkout-fix-session", methods=["POST"])
+def checkout_fix_session():
+    name         = request.form.get("name", "").strip()
+    email        = request.form.get("email", "").strip()
+    phone        = request.form.get("phone", "").strip()
+    session_type = request.form.get("session_type", "").strip()
+
+    used      = count_fix_bookings()
+    remaining = max(0, FREE_FIX_SLOTS - used)
+
+    if not name or not email:
+        return render_template("book_fix_session.html", error="Name and email are required.",
+                               spots_remaining=remaining, total_spots=FREE_FIX_SLOTS)
+
+    if not session_type:
+        return render_template("book_fix_session.html", error="Please select Zoom or in-person.",
+                               spots_remaining=remaining, total_spots=FREE_FIX_SLOTS)
+
+    import uuid
+    save_service_booking({
+        "session_id": str(uuid.uuid4()),
+        "service":    "fix_session",
+        "name":       name,
+        "email":      email,
+        "phone":      phone,
+        "paid_at":    datetime.now().strftime("%d %b %Y %H:%M"),
+        "amount":     "FREE" if remaining > 0 else "$149",
+    })
+
+    send_booking_confirmation(
+        to_email     = email,
+        name         = name,
+        service_name = "Home Security Fix Session",
+        cal_link     = "https://cal.com/cybersurf/home-security-fix",
+        price        = "FREE" if remaining > 0 else "$149",
+        free         = remaining > 0,
+    )
+
+    return redirect("/book-fix-session-success")
+
+
+@app.route("/book-fix-session-success")
+def book_fix_session_success():
+    return render_template("book_fix_session_success.html")
+
+
 @app.route("/webhook", methods=["POST"])
 def webhook():
     payload    = request.get_data()
@@ -1251,6 +1421,47 @@ def webhook():
                 service_name = "Lock Change Session",
                 cal_link     = "https://cal.com/cybersurf/lock-change",
                 price        = "$79",
+            )
+        elif meta.get("product") == "home_scan":
+            name        = meta.get("customer_name", "")
+            email       = meta.get("email", "")
+            device_tier = meta.get("device_tier", "standard")
+            price_label = meta.get("price_label", "$229")
+            service_label = "Home Security Scan (up to 6 devices)" if device_tier == "extended" else "Home Security Scan (up to 3 devices)"
+            save_service_booking({
+                "session_id": sess["id"],
+                "service":    service_label,
+                "name":       name,
+                "email":      email,
+                "phone":      meta.get("phone", ""),
+                "paid_at":    datetime.now().strftime("%d %b %Y %H:%M"),
+                "amount":     f"${sess.get('amount_total', 22900) / 100:.2f} AUD",
+            })
+            send_booking_confirmation(
+                to_email     = email,
+                name         = name,
+                service_name = service_label,
+                cal_link     = "https://cal.com/cybersurf/home-security-scan",
+                price        = price_label,
+            )
+        elif meta.get("product") == "home_scan_bundle":
+            name  = meta.get("customer_name", "")
+            email = meta.get("email", "")
+            save_service_booking({
+                "session_id": sess["id"],
+                "service":    "Home Security Scan Bundle",
+                "name":       name,
+                "email":      email,
+                "phone":      meta.get("phone", ""),
+                "paid_at":    datetime.now().strftime("%d %b %Y %H:%M"),
+                "amount":     f"${sess.get('amount_total', 29900) / 100:.2f} AUD",
+            })
+            send_booking_confirmation(
+                to_email     = email,
+                name         = name,
+                service_name = "Home Security Scan Bundle",
+                cal_link     = "https://cal.com/cybersurf/home-security-scan",
+                price        = "$299",
             )
         else:
             save_order({
