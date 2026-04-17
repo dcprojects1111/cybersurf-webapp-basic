@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>CyberSurf — Home Security Scan</title>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@700;800&family=Roboto:wght@400;500&display=swap" rel="stylesheet"/>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:'Roboto',sans-serif;background:linear-gradient(160deg,#0a1628 0%,#0d2240 100%);min-height:100vh;padding:40px 20px;color:#fcfdf2;}
+    .page{max-width:560px;margin:0 auto;}
+    .brand{font-family:'Montserrat',sans-serif;font-weight:800;font-size:20px;color:#fff;margin-bottom:40px;}
+    .brand span{color:#00d2ff;}
+    .badge{display:inline-block;background:rgba(0,210,255,.12);border:1px solid rgba(0,210,255,.35);color:#00d2ff;font-family:'Montserrat',sans-serif;font-weight:700;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;padding:4px 12px;border-radius:20px;margin-bottom:18px;}
+    h1{font-family:'Montserrat',sans-serif;font-weight:800;font-size:26px;color:#fcfdf2;margin-bottom:8px;line-height:1.25;}
+    .sub{font-size:15px;color:rgba(252,253,242,.55);margin-bottom:32px;line-height:1.6;}
+    .includes{background:rgba(0,210,255,.05);border:1px solid rgba(0,210,255,.2);border-radius:12px;padding:20px 24px;margin-bottom:32px;}
+    .includes-title{font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:rgba(0,210,255,.6);margin-bottom:12px;}
+    .includes li{font-size:14px;color:rgba(252,253,242,.75);line-height:2;list-style:none;padding-left:0;}
+    .includes li::before{content:"✓ ";color:#00d2ff;font-weight:700;}
+    .card{background:rgba(255,255,255,.04);border:1px solid rgba(0,210,255,.2);border-radius:18px;padding:36px 32px;}
+    .form-group{margin-bottom:20px;}
+    label{display:block;font-family:'Montserrat',sans-serif;font-weight:700;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:#00d2ff;margin-bottom:8px;}
+    input{width:100%;background:rgba(255,255,255,.06);border:1px solid rgba(0,210,255,.22);border-radius:8px;padding:13px 16px;font-size:15px;color:#fcfdf2;outline:none;font-family:'Roboto',sans-serif;}
+    input::placeholder{color:rgba(252,253,242,.28);}
+    input:focus{border-color:#00d2ff;background:rgba(0,210,255,.05);}
+    .hint{font-size:12px;color:rgba(252,253,242,.35);margin-top:5px;}
+    .error{background:rgba(255,71,87,.1);border:1px solid rgba(255,71,87,.35);color:#ff4757;border-radius:8px;padding:12px 16px;margin-bottom:20px;font-size:14px;}
+
+    /* Device tier selector */
+    .tier-group{margin-bottom:24px;}
+    .tier-option{display:flex;align-items:flex-start;gap:14px;background:rgba(255,255,255,.04);border:1px solid rgba(0,210,255,.2);border-radius:10px;padding:16px 18px;margin-bottom:10px;cursor:pointer;transition:border-color .2s,background .2s;}
+    .tier-option:hover{border-color:rgba(0,210,255,.5);background:rgba(0,210,255,.06);}
+    .tier-option input[type="radio"]{margin-top:3px;accent-color:#00d2ff;width:16px;height:16px;flex-shrink:0;}
+    .tier-option.selected{border-color:#00d2ff;background:rgba(0,210,255,.08);}
+    .tier-label{font-family:'Montserrat',sans-serif;font-weight:700;font-size:14px;color:#fcfdf2;margin-bottom:3px;}
+    .tier-desc{font-size:12px;color:rgba(252,253,242,.5);line-height:1.5;}
+    .tier-price{font-family:'Montserrat',sans-serif;font-weight:800;font-size:18px;color:#00d2ff;margin-left:auto;flex-shrink:0;align-self:center;}
+
+    button{width:100%;background:linear-gradient(135deg,#00d2ff 0%,#0077be 100%);color:#fff;font-family:'Montserrat',sans-serif;font-weight:800;font-size:16px;padding:16px;border:none;border-radius:10px;cursor:pointer;transition:transform .2s;margin-top:8px;}
+    button:hover{transform:translateY(-2px);}
+    .policy-note{background:rgba(255,165,0,.06);border:1px solid rgba(255,165,0,.2);border-radius:10px;padding:14px 18px;margin-top:20px;font-size:12px;color:rgba(252,253,242,.55);line-height:1.7;}
+    .policy-note strong{color:#ffa500;}
+    .consent-note{background:rgba(0,210,255,.05);border:1px solid rgba(0,210,255,.15);border-radius:10px;padding:14px 18px;margin-top:16px;font-size:12px;color:rgba(252,253,242,.55);line-height:1.7;}
+    .consent-note strong{color:#00d2ff;}
+    .footer-note{font-size:12px;color:rgba(252,253,242,.3);text-align:center;margin-top:20px;line-height:1.7;}
+    .footer-note a{color:rgba(0,210,255,.6);text-decoration:none;}
+
+    .step-flow{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:32px;}
+    .step{background:rgba(255,255,255,.04);border:1px solid rgba(0,210,255,.15);border-radius:12px;padding:16px 12px;text-align:center;}
+    .step-num{font-family:'Montserrat',sans-serif;font-weight:800;font-size:22px;color:#00d2ff;margin-bottom:6px;}
+    .step-text{font-size:11px;color:rgba(252,253,242,.6);line-height:1.5;}
+  </style>
+</head>
+<body>
+<div class="page">
+  <div class="brand">Cyber<span>Surf</span> Security</div>
+
+  <div class="badge">Home Security Scan — Sunshine Coast</div>
+  <h1>Find out what your home network is broadcasting to the internet.</h1>
+  <p class="sub">An in-person assessment at your Sunshine Coast home. We scan your network from the outside the way an attacker would, check your router, scan your devices, and deliver a plain-English report showing exactly what's exposed and what to do about it.</p>
+
+  <div class="step-flow">
+    <div class="step">
+      <div class="step-num">1</div>
+      <div class="step-text">Pay below — takes 60 seconds</div>
+    </div>
+    <div class="step">
+      <div class="step-num">2</div>
+      <div class="step-text">Pick a time that suits you</div>
+    </div>
+    <div class="step">
+      <div class="step-num">3</div>
+      <div class="step-text">We come to you — report within 2 days</div>
+    </div>
+  </div>
+
+  <div class="includes">
+    <div class="includes-title">What's included</div>
+    <ul class="includes">
+      <li>External network scan — see what the internet sees about your connection</li>
+      <li>Router check — firmware, admin panel exposure, known vulnerabilities</li>
+      <li>Device scan with Malwarebytes — malware, PUPs, flagged extensions</li>
+      <li>Plain-English report — risk rating, findings, and priority actions</li>
+      <li>Delivered via secure link within 2 business days</li>
+      <li>In person at your Sunshine Coast home — you watch every step</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    {% if error %}
+    <div class="error">{{ error }}</div>
+    {% endif %}
+
+    <form action="/checkout-home-scan" method="POST">
+
+      <div class="form-group">
+        <label>Your name</label>
+        <input type="text" name="name" placeholder="Jane Smith" required/>
+      </div>
+
+      <div class="form-group">
+        <label>Email — where to send your booking link</label>
+        <input type="email" name="email" placeholder="jane@example.com" required/>
+      </div>
+
+      <div class="form-group">
+        <label>Phone</label>
+        <input type="tel" name="phone" placeholder="+61 4XX XXX XXX"/>
+        <div class="hint">We'll use this to confirm your appointment.</div>
+      </div>
+
+      <div class="tier-group">
+        <label>How many devices to scan?</label>
+
+        <label class="tier-option {% if preselected_tier != 'extended' %}selected{% endif %}" id="label-standard">
+          <input type="radio" name="device_tier" value="standard" {% if preselected_tier != 'extended' %}checked{% endif %} onchange="selectTier(this)"/>
+          <div>
+            <div class="tier-label">Up to 3 devices</div>
+            <div class="tier-desc">Router + up to 3 computers, phones, or tablets</div>
+          </div>
+          <div class="tier-price">$229</div>
+        </label>
+
+        <label class="tier-option {% if preselected_tier == 'extended' %}selected{% endif %}" id="label-extended">
+          <input type="radio" name="device_tier" value="extended" {% if preselected_tier == 'extended' %}checked{% endif %} onchange="selectTier(this)"/>
+          <div>
+            <div class="tier-label">Up to 6 devices</div>
+            <div class="tier-desc">Router + up to 6 computers, phones, or tablets</div>
+          </div>
+          <div class="tier-price">$269</div>
+        </label>
+      </div>
+
+      <button type="submit" id="submit-btn">Book my Home Security Scan — {% if preselected_tier == 'extended' %}$269{% else %}$229{% endif %} &rarr;</button>
+    </form>
+
+    <div class="consent-note">
+      <strong>Consent form required:</strong> After booking, we'll send you a short consent form to complete before your appointment. This confirms your IP address, devices in scope, and your authority over the network. We can't start the scan without it.
+    </div>
+
+    <div class="policy-note">
+      <strong>Cancellation policy:</strong>
+      Cancel 48+ hours before — full refund.
+      Cancel 24–48 hours — 50% refund or reschedule credit.
+      Cancel under 24 hours / no-show — no refund, credit valid 60 days.
+    </div>
+  </div>
+
+  <div class="footer-note">
+    Secured by Stripe &nbsp;·&nbsp; Sunshine Coast only &nbsp;·&nbsp; Booking link arrives by email<br/>
+    Questions? <a href="mailto:support@cybersurf.au">support@cybersurf.au</a>
+  </div>
+</div>
+
+<script>
+  function selectTier(radio) {
+    document.getElementById('label-standard').classList.remove('selected');
+    document.getElementById('label-extended').classList.remove('selected');
+    if (radio.value === 'extended') {
+      document.getElementById('label-extended').classList.add('selected');
+      document.getElementById('submit-btn').textContent = 'Book my Home Security Scan — $269 →';
+    } else {
+      document.getElementById('label-standard').classList.add('selected');
+      document.getElementById('submit-btn').textContent = 'Book my Home Security Scan — $229 →';
+    }
+  }
+</script>
+</body>
+</html>
