@@ -1556,6 +1556,11 @@ def run_check():
         # HIBP verified breach list (runs independently — failure is non-fatal)
         hibp_breaches = query_hibp(email)
 
+        # If Dehashed found nothing but HIBP found verified breaches, upgrade from CLEAR
+        if risk == "CLEAR" and hibp_breaches:
+            risk      = "LOW"
+            risk_desc = "Breach found in verified public records. No passwords exposed but your data is circulating."
+
         results.append({
             "email":        email,
             "total":        total,
