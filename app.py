@@ -1347,7 +1347,7 @@ def checkout_fix_session():
         to_email     = email,
         name         = name,
         service_name = "Home Security Fix Session",
-        cal_link     = "https://cal.com/cybersurf/home-security-fix",
+        cal_link     = "https://cal.com/cybersurf/fix",
         price        = "FREE" if remaining > 0 else "$149",
         free         = remaining > 0,
     )
