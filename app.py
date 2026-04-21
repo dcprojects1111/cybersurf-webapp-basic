@@ -105,6 +105,10 @@ def init_db():
                 )
             """)
             cur.execute("""
+                ALTER TABLE service_bookings
+                ADD COLUMN IF NOT EXISTS preferred_time TEXT
+            """)
+            cur.execute("""
                 CREATE TABLE IF NOT EXISTS subscribers (
                     id                     SERIAL PRIMARY KEY,
                     name                   TEXT,
@@ -614,12 +618,12 @@ def save_service_booking(booking):
         with conn.cursor() as cur:
             cur.execute("""
                 INSERT INTO service_bookings
-                    (session_id, service, name, email, phone, paid_at, amount)
+                    (session_id, service, name, email, phone, paid_at, amount, preferred_time)
                 VALUES
                     (%(session_id)s, %(service)s, %(name)s, %(email)s,
-                     %(phone)s, %(paid_at)s, %(amount)s)
+                     %(phone)s, %(paid_at)s, %(amount)s, %(preferred_time)s)
                 ON CONFLICT (session_id) DO NOTHING
-            """, booking)
+            """, {**booking, "preferred_time": booking.get("preferred_time")})
 
 
 def load_service_bookings():
@@ -654,7 +658,7 @@ def complete_service_booking(booking_id):
             cur.execute("UPDATE service_bookings SET status = 'completed' WHERE id = %s", (booking_id,))
 
 
-def send_booking_confirmation(to_email, name, service_name, cal_link, price, free=False, upsell_note=None, upsell_title=None):
+def send_booking_confirmation(to_email, name, service_name, cal_link, price, free=False, upsell_note=None, upsell_title=None, in_person=False, preferred_time=None):
     if not SMTP_USER or not SMTP_PASS:
         return False, "SMTP not configured"
     try:
@@ -670,6 +674,63 @@ def send_booking_confirmation(to_email, name, service_name, cal_link, price, fre
                 f"Hi {name}, your payment of <strong>{price}</strong> for "
                 f"<strong>{service_name}</strong> has been received."
             )
+
+        # CTA block — booking link for online/remote, contact note for in-person
+        if in_person:
+            time_note = (
+                f'<p style="font-size:14px;font-weight:600;color:#00d2ff;margin:12px 0 0;">'
+                f'Your requested time: {preferred_time}</p>'
+            ) if preferred_time else ""
+            cta_block = (
+                f'<p style="font-size:14px;color:rgba(252,253,242,.75);line-height:1.6;margin:0;">'
+                f"We'll contact you within a few hours to confirm your appointment time."
+                f"</p>{time_note}"
+            )
+        else:
+            cta_block = (
+                f'<p style="font-size:14px;color:rgba(252,253,242,.75);line-height:1.6;margin:0 0 20px;">'
+                f"Click below to choose your session time — pick whatever works best for you.</p>"
+                f'<a href="{cal_link}" style="display:inline-block;background:linear-gradient(135deg,#00d2ff 0%,#0077be 100%);'
+                f'color:#fff;font-weight:800;font-size:14px;padding:12px 28px;border-radius:8px;text-decoration:none;">'
+                f"Choose your session time &rarr;</a>"
+            )
+
+        # What happens next steps
+        if in_person:
+            steps_items = (
+                "<li>We'll contact you to confirm a time — usually within a few hours</li>"
+                "<li>Darryl comes to you — Sunshine Coast in-person only</li>"
+                "<li>Problem fixed before we leave — plain English explanation before we go</li>"
+            )
+        else:
+            steps_items = (
+                "<li>Click the link above and pick a time that suits you</li>"
+                "<li>You'll receive a calendar invite with the session link</li>"
+                "<li>Darryl will run your session at the scheduled time</li>"
+            )
+
+        upsell_block = ""
+        if upsell_note:
+            upsell_block = (
+                f'<div style="background:rgba(255,200,0,.06);border:1px solid rgba(255,200,0,.2);'
+                f'border-radius:10px;padding:16px 20px;margin-bottom:24px;">'
+                f'<p style="font-size:13px;font-weight:700;color:#ffd200;margin-bottom:8px;">'
+                f'{upsell_title or "Want us to fix anything we find on the day?"}</p>'
+                f'<p style="font-size:13px;color:rgba(252,253,242,.7);line-height:1.7;margin:0;">'
+                f'{upsell_note}</p></div>'
+            )
+
+        cancel_block = "" if free else (
+            '<div style="background:rgba(255,165,0,.06);border:1px solid rgba(255,165,0,.2);'
+            'border-radius:10px;padding:14px 18px;margin-bottom:24px;'
+            'font-size:12px;color:rgba(252,253,242,.6);line-height:1.7;">'
+            '<strong style="color:#ffa500;">Cancellation policy:</strong> '
+            'Cancel 48+ hours before — full refund. '
+            'Cancel 24–48 hours — 50% refund or reschedule credit. '
+            'Cancel under 24 hours / no-show — no refund, credit valid 60 days.'
+            '</div>'
+        )
+
         body_html = f"""<!DOCTYPE html>
 <html><head><meta charset="UTF-8"/></head>
 <body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;
@@ -686,18 +747,10 @@ def send_booking_confirmation(to_email, name, service_name, cal_link, price, fre
       <div style="font-size:16px;font-weight:700;color:#fcfdf2;margin-bottom:8px;">
         {confirm_header}
       </div>
-      <p style="font-size:14px;color:rgba(252,253,242,.75);line-height:1.6;margin:0 0 6px;">
+      <p style="font-size:14px;color:rgba(252,253,242,.75);line-height:1.6;margin:0 0 16px;">
         {confirm_body}
       </p>
-      <p style="font-size:14px;color:rgba(252,253,242,.75);line-height:1.6;margin:0 0 20px;">
-        Click below to choose your session time — pick whatever works best for you.
-      </p>
-      <a href="{cal_link}"
-         style="display:inline-block;background:linear-gradient(135deg,#00d2ff 0%,#0077be 100%);
-                color:#fff;font-weight:800;font-size:14px;padding:12px 28px;
-                border-radius:8px;text-decoration:none;">
-        Choose your session time &rarr;
-      </a>
+      {cta_block}
     </div>
 
     <div style="background:rgba(255,255,255,.04);border:1px solid rgba(0,210,255,.15);
@@ -708,30 +761,12 @@ def send_booking_confirmation(to_email, name, service_name, cal_link, price, fre
       </p>
       <ol style="margin:0 0 0 18px;font-size:13px;color:rgba(252,253,242,.7);
                  line-height:1.9;padding:0;">
-        <li>Click the link above and pick a time that suits you</li>
-        <li>You'll receive a calendar invite with the Zoom link</li>
-        <li>Darryl will run your session at the scheduled time</li>
+        {steps_items}
       </ol>
     </div>
 
-    {f'''<div style="background:rgba(255,200,0,.06);border:1px solid rgba(255,200,0,.2);
-                border-radius:10px;padding:16px 20px;margin-bottom:24px;">
-      <p style="font-size:13px;font-weight:700;color:#ffd200;margin-bottom:8px;">
-        {upsell_title or "Want us to fix anything we find on the day?"}
-      </p>
-      <p style="font-size:13px;color:rgba(252,253,242,.7);line-height:1.7;margin:0;">
-        {upsell_note}
-      </p>
-    </div>''' if upsell_note else ""}
-
-    {"" if free else '''<div style="background:rgba(255,165,0,.06);border:1px solid rgba(255,165,0,.2);
-                border-radius:10px;padding:14px 18px;margin-bottom:24px;
-                font-size:12px;color:rgba(252,253,242,.6);line-height:1.7;">
-      <strong style="color:#ffa500;">Cancellation policy:</strong>
-      Cancel 48+ hours before — full refund.
-      Cancel 24–48 hours — 50% refund or reschedule credit.
-      Cancel under 24 hours / no-show — no refund, credit valid 60 days.
-    </div>'''}
+    {upsell_block}
+    {cancel_block}
 
     <p style="font-size:13px;color:rgba(252,253,242,.4);line-height:1.7;">
       Questions? Reply to this email or contact
@@ -1384,11 +1419,12 @@ def book_it_support():
 
 @app.route("/checkout-it-support", methods=["POST"])
 def checkout_it_support():
-    name    = request.form.get("name", "").strip()
-    email   = request.form.get("email", "").strip()
-    phone   = request.form.get("phone", "").strip()
-    suburb  = request.form.get("suburb", "").strip()
-    service = request.form.get("service", "tune_up").strip()
+    name           = request.form.get("name", "").strip()
+    email          = request.form.get("email", "").strip()
+    phone          = request.form.get("phone", "").strip()
+    suburb         = request.form.get("suburb", "").strip()
+    service        = request.form.get("service", "tune_up").strip()
+    preferred_time = request.form.get("preferred_time", "").strip()
 
     if not name or not email:
         return render_template("book_it_support.html",
@@ -1409,13 +1445,14 @@ def checkout_it_support():
         mode="payment",
         customer_email=email,
         metadata={
-            "product":       "it_support",
-            "service":       service,
-            "service_name":  service_name,
-            "customer_name": name,
-            "email":         email,
-            "phone":         phone,
-            "suburb":        suburb,
+            "product":        "it_support",
+            "service":        service,
+            "service_name":   service_name,
+            "customer_name":  name,
+            "email":          email,
+            "phone":          phone,
+            "suburb":         suburb,
+            "preferred_time": preferred_time,
         },
         success_url=f"{APP_BASE_URL}/book-it-success",
         cancel_url=f"{APP_BASE_URL}/book-it-support?service={service}",
@@ -1566,27 +1603,31 @@ def webhook():
                 upsell_note  = "After your in-person scan, if we find malware or vulnerabilities, we fix everything before we leave — same day, no extra charge. We'll send you the Fix Session booking link once your scan is confirmed.",
             )
         elif meta.get("product") == "it_support":
-            name         = meta.get("customer_name", "")
-            email        = meta.get("email", "")
-            service_name = meta.get("service_name", "IT Support")
-            service_key  = meta.get("service", "")
-            price_labels = {"quick_fix": "$99", "tune_up": "$199", "fresh_device": "$249", "new_setup": "$299"}
-            price_label  = price_labels.get(service_key, f"${sess.get('amount_total', 9900) / 100:.0f}")
+            name           = meta.get("customer_name", "")
+            email          = meta.get("email", "")
+            service_name   = meta.get("service_name", "IT Support")
+            service_key    = meta.get("service", "")
+            preferred_time = meta.get("preferred_time", "") or None
+            price_labels   = {"quick_fix": "$99", "tune_up": "$199", "fresh_device": "$249", "new_setup": "$299"}
+            price_label    = price_labels.get(service_key, f"${sess.get('amount_total', 9900) / 100:.0f}")
             save_service_booking({
-                "session_id": sess["id"],
-                "service":    service_name,
-                "name":       name,
-                "email":      email,
-                "phone":      meta.get("phone", ""),
-                "paid_at":    datetime.now().strftime("%d %b %Y %H:%M"),
-                "amount":     f"${sess.get('amount_total', 9900) / 100:.2f} AUD",
+                "session_id":     sess["id"],
+                "service":        service_name,
+                "name":           name,
+                "email":          email,
+                "phone":          meta.get("phone", ""),
+                "paid_at":        datetime.now().strftime("%d %b %Y %H:%M"),
+                "amount":         f"${sess.get('amount_total', 9900) / 100:.2f} AUD",
+                "preferred_time": preferred_time,
             })
             send_booking_confirmation(
-                to_email     = email,
-                name         = name,
-                service_name = service_name,
-                cal_link     = "https://cal.com/cybersurf/it-support",
-                price        = price_label,
+                to_email       = email,
+                name           = name,
+                service_name   = service_name,
+                cal_link       = None,
+                price          = price_label,
+                in_person      = True,
+                preferred_time = preferred_time,
             )
         else:
             save_order({
