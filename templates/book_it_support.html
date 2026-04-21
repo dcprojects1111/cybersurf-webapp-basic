@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>CyberSurf — Book IT Support</title>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@700;800&family=Roboto:wght@400;500&display=swap" rel="stylesheet"/>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:'Roboto',sans-serif;background:linear-gradient(160deg,#0a1628 0%,#0d2240 100%);min-height:100vh;padding:40px 20px;color:#fcfdf2;}
+    .page{max-width:580px;margin:0 auto;}
+    .brand{font-family:'Montserrat',sans-serif;font-weight:800;font-size:20px;color:#fff;margin-bottom:40px;}
+    .brand span{color:#00d2ff;}
+    .badge{display:inline-block;background:rgba(0,210,255,.12);border:1px solid rgba(0,210,255,.35);color:#00d2ff;font-family:'Montserrat',sans-serif;font-weight:700;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;padding:4px 12px;border-radius:20px;margin-bottom:18px;}
+    h1{font-family:'Montserrat',sans-serif;font-weight:800;font-size:26px;color:#fcfdf2;margin-bottom:8px;line-height:1.25;}
+    .sub{font-size:15px;color:rgba(252,253,242,.55);margin-bottom:32px;line-height:1.6;}
+    .step-flow{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:32px;}
+    .step{background:rgba(255,255,255,.04);border:1px solid rgba(0,210,255,.15);border-radius:12px;padding:16px 12px;text-align:center;}
+    .step-num{font-family:'Montserrat',sans-serif;font-weight:800;font-size:22px;color:#00d2ff;margin-bottom:6px;}
+    .step-text{font-size:11px;color:rgba(252,253,242,.6);line-height:1.5;}
+    .card{background:rgba(255,255,255,.04);border:1px solid rgba(0,210,255,.2);border-radius:18px;padding:36px 32px;}
+    .form-group{margin-bottom:20px;}
+    label{display:block;font-family:'Montserrat',sans-serif;font-weight:700;font-size:11px;letter-spacing:1.5px;text-transform:uppercase;color:#00d2ff;margin-bottom:8px;}
+    input{width:100%;background:rgba(255,255,255,.06);border:1px solid rgba(0,210,255,.22);border-radius:8px;padding:13px 16px;font-size:15px;color:#fcfdf2;outline:none;font-family:'Roboto',sans-serif;}
+    input::placeholder{color:rgba(252,253,242,.28);}
+    input:focus{border-color:#00d2ff;background:rgba(0,210,255,.05);}
+    .hint{font-size:12px;color:rgba(252,253,242,.35);margin-top:5px;}
+    .error{background:rgba(255,71,87,.1);border:1px solid rgba(255,71,87,.35);color:#ff4757;border-radius:8px;padding:12px 16px;margin-bottom:20px;font-size:14px;}
+    .service-group{margin-bottom:24px;}
+    .service-option{display:flex;align-items:flex-start;gap:14px;background:rgba(255,255,255,.04);border:1px solid rgba(0,210,255,.2);border-radius:10px;padding:16px 18px;margin-bottom:10px;cursor:pointer;transition:border-color .2s,background .2s;}
+    .service-option:hover{border-color:rgba(0,210,255,.5);background:rgba(0,210,255,.06);}
+    .service-option input[type="radio"]{margin-top:3px;accent-color:#00d2ff;width:16px;height:16px;flex-shrink:0;}
+    .service-option.selected{border-color:#00d2ff;background:rgba(0,210,255,.08);}
+    .service-label{font-family:'Montserrat',sans-serif;font-weight:700;font-size:14px;color:#fcfdf2;margin-bottom:3px;}
+    .service-desc{font-size:12px;color:rgba(252,253,242,.5);line-height:1.5;}
+    .service-price{font-family:'Montserrat',sans-serif;font-weight:800;font-size:18px;color:#00d2ff;margin-left:auto;flex-shrink:0;align-self:center;}
+    button{width:100%;background:linear-gradient(135deg,#00d2ff 0%,#0077be 100%);color:#fff;font-family:'Montserrat',sans-serif;font-weight:800;font-size:16px;padding:16px;border:none;border-radius:10px;cursor:pointer;transition:transform .2s;margin-top:8px;}
+    button:hover{transform:translateY(-2px);}
+    .policy-note{background:rgba(255,165,0,.06);border:1px solid rgba(255,165,0,.2);border-radius:10px;padding:14px 18px;margin-top:20px;font-size:12px;color:rgba(252,253,242,.55);line-height:1.7;}
+    .policy-note strong{color:#ffa500;}
+    .footer-note{font-size:12px;color:rgba(252,253,242,.3);text-align:center;margin-top:20px;line-height:1.7;}
+    .footer-note a{color:rgba(0,210,255,.6);text-decoration:none;}
+    .divider{border:none;border-top:1px solid rgba(0,210,255,.1);margin:24px 0;}
+  </style>
+</head>
+<body>
+<div class="page">
+  <div class="brand">Cyber<span>Surf</span> Security</div>
+
+  <div class="badge">Home IT Help — Sunshine Coast</div>
+  <h1>Book your IT call-out.</h1>
+  <p class="sub">Flat-rate pricing, same-week availability. We come to you — Sunshine Coast only.</p>
+
+  <div class="step-flow">
+    <div class="step">
+      <div class="step-num">1</div>
+      <div class="step-text">Pick your package and pay</div>
+    </div>
+    <div class="step">
+      <div class="step-num">2</div>
+      <div class="step-text">We confirm your time by email</div>
+    </div>
+    <div class="step">
+      <div class="step-num">3</div>
+      <div class="step-text">We come to you — problem solved</div>
+    </div>
+  </div>
+
+  <div class="card">
+    {% if error %}
+    <div class="error">{{ error }}</div>
+    {% endif %}
+
+    <form action="/checkout-it-support" method="POST">
+
+      <div class="service-group">
+        <label>Select your package</label>
+
+        <label class="service-option {% if preselected == 'quick_fix' %}selected{% endif %}" id="lbl-quick_fix">
+          <input type="radio" name="service" value="quick_fix" {% if preselected == 'quick_fix' %}checked{% endif %} onchange="selectService(this)"/>
+          <div>
+            <div class="service-label">Quick Fix</div>
+            <div class="service-desc">One issue — slow computer, Wi-Fi, printer, device setup. Up to 1 hour.</div>
+          </div>
+          <div class="service-price">$99</div>
+        </label>
+
+        <label class="service-option {% if preselected == 'tune_up' %}selected{% endif %}" id="lbl-tune_up">
+          <input type="radio" name="service" value="tune_up" {% if preselected == 'tune_up' %}checked{% endif %} onchange="selectService(this)"/>
+          <div>
+            <div class="service-label">Home Tech Tune-Up</div>
+            <div class="service-desc">Full device health check, updates, speed, security once-over. Up to 2.5 hours.</div>
+          </div>
+          <div class="service-price">$199</div>
+        </label>
+
+        <label class="service-option {% if preselected == 'fresh_device' %}selected{% endif %}" id="lbl-fresh_device">
+          <input type="radio" name="service" value="fresh_device" {% if preselected == 'fresh_device' %}checked{% endif %} onchange="selectService(this)"/>
+          <div>
+            <div class="service-label">Fresh Device Setup</div>
+            <div class="service-desc">New device set up &amp; locked down — data transfer, antivirus, VPN, 2FA + free Breach Check. Up to 3 hours.</div>
+          </div>
+          <div class="service-price">$249</div>
+        </label>
+
+        <label class="service-option {% if preselected == 'new_setup' %}selected{% endif %}" id="lbl-new_setup">
+          <input type="radio" name="service" value="new_setup" {% if preselected == 'new_setup' %}checked{% endif %} onchange="selectService(this)"/>
+          <div>
+            <div class="service-label">New Home Tech Setup</div>
+            <div class="service-desc">Multiple devices set up — laptop, phone, tablet, printer, TV — all connected &amp; secure. Up to 4 hours.</div>
+          </div>
+          <div class="service-price">$299</div>
+        </label>
+      </div>
+
+      <hr class="divider"/>
+
+      <div class="form-group">
+        <label>Your name</label>
+        <input type="text" name="name" placeholder="Jane Smith" required/>
+      </div>
+
+      <div class="form-group">
+        <label>Email — where to send your booking confirmation</label>
+        <input type="email" name="email" placeholder="jane@example.com" required/>
+      </div>
+
+      <div class="form-group">
+        <label>Phone</label>
+        <input type="tel" name="phone" placeholder="+61 4XX XXX XXX"/>
+        <div class="hint">We'll use this to confirm your appointment time.</div>
+      </div>
+
+      <div class="form-group">
+        <label>Suburb</label>
+        <input type="text" name="suburb" placeholder="Noosa Heads, Caloundra, Buderim..."/>
+        <div class="hint">Sunshine Coast only — helps us plan travel time.</div>
+      </div>
+
+      <button type="submit" id="submit-btn">Book Now — pay securely &rarr;</button>
+    </form>
+
+    <div class="policy-note">
+      <strong>Cancellation policy:</strong>
+      Cancel 48+ hours before — full refund.
+      Cancel 24–48 hours — 50% refund or reschedule credit.
+      Cancel under 24 hours / no-show — no refund, credit valid 60 days.
+    </div>
+  </div>
+
+  <div class="footer-note">
+    Secured by Stripe &nbsp;·&nbsp; Sunshine Coast only &nbsp;·&nbsp; Confirmation arrives by email<br/>
+    Questions? <a href="mailto:support@cybersurf.au">support@cybersurf.au</a>
+  </div>
+</div>
+
+<script>
+  const services = {
+    quick_fix:    { label: "Quick Fix",             price: "$99"  },
+    tune_up:      { label: "Home Tech Tune-Up",     price: "$199" },
+    fresh_device: { label: "Fresh Device Setup",    price: "$249" },
+    new_setup:    { label: "New Home Tech Setup",   price: "$299" },
+  };
+
+  function selectService(radio) {
+    document.querySelectorAll('.service-option').forEach(el => el.classList.remove('selected'));
+    document.getElementById('lbl-' + radio.value).classList.add('selected');
+    const s = services[radio.value];
+    document.getElementById('submit-btn').textContent =
+      'Book ' + s.label + ' — ' + s.price + ' →';
+  }
+
+  // Set initial button label on page load
+  (function() {
+    const checked = document.querySelector('input[name="service"]:checked');
+    if (checked) selectService(checked);
+  })();
+</script>
+</body>
+</html>

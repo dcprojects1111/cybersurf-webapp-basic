@@ -45,6 +45,12 @@ HOME_SCAN_PRICE_ID            = os.environ.get("HOME_SCAN_PRICE_ID", "")        
 HOME_SCAN_EXTENDED_PRICE_ID   = os.environ.get("HOME_SCAN_EXTENDED_PRICE_ID", "")  # Home Security Scan — $269 (6 devices)
 HOME_SCAN_BUNDLE_PRICE_ID     = os.environ.get("HOME_SCAN_BUNDLE_PRICE_ID", "")    # Complete Home Security Check — $299
 
+# IT Support Services
+IT_QUICK_PRICE_ID    = os.environ.get("IT_QUICK_PRICE_ID", "")    # Quick Fix — $99
+IT_TUNEUP_PRICE_ID   = os.environ.get("IT_TUNEUP_PRICE_ID", "")   # Home Tech Tune-Up — $199
+IT_NEWSETUP_PRICE_ID = os.environ.get("IT_NEWSETUP_PRICE_ID", "") # New Home Tech Setup — $299
+IT_FRESH_PRICE_ID    = os.environ.get("IT_FRESH_PRICE_ID", "")    # Fresh Device Setup — $249
+
 # Fix Session launch offer
 FREE_FIX_SLOTS = int(os.environ.get("FREE_FIX_SLOTS", "7"))
 
@@ -1360,6 +1366,68 @@ def book_fix_session_success():
     return render_template("book_fix_session_success.html")
 
 
+# ─────────────────────────── IT Support Booking ───────────────────────────
+
+IT_SERVICE_MAP = {
+    "quick_fix":    ("Quick Fix",            IT_QUICK_PRICE_ID,    "$99"),
+    "tune_up":      ("Home Tech Tune-Up",    IT_TUNEUP_PRICE_ID,   "$199"),
+    "fresh_device": ("Fresh Device Setup",   IT_FRESH_PRICE_ID,    "$249"),
+    "new_setup":    ("New Home Tech Setup",  IT_NEWSETUP_PRICE_ID, "$299"),
+}
+
+
+@app.route("/book-it-support")
+def book_it_support():
+    preselected = request.args.get("service", "tune_up")
+    return render_template("book_it_support.html", preselected=preselected)
+
+
+@app.route("/checkout-it-support", methods=["POST"])
+def checkout_it_support():
+    name    = request.form.get("name", "").strip()
+    email   = request.form.get("email", "").strip()
+    phone   = request.form.get("phone", "").strip()
+    suburb  = request.form.get("suburb", "").strip()
+    service = request.form.get("service", "tune_up").strip()
+
+    if not name or not email:
+        return render_template("book_it_support.html",
+                               error="Name and email are required.", preselected=service)
+
+    service_info = IT_SERVICE_MAP.get(service)
+    if not service_info:
+        return render_template("book_it_support.html",
+                               error="Please select a service.", preselected=service)
+
+    service_name, price_id, price_label = service_info
+    if not price_id:
+        return f"IT Support service '{service_name}' is not configured yet — please contact support@cybersurf.au.", 500
+
+    checkout_session = stripe.checkout.Session.create(
+        payment_method_types=["card"],
+        line_items=[{"price": price_id, "quantity": 1}],
+        mode="payment",
+        customer_email=email,
+        metadata={
+            "product":       "it_support",
+            "service":       service,
+            "service_name":  service_name,
+            "customer_name": name,
+            "email":         email,
+            "phone":         phone,
+            "suburb":        suburb,
+        },
+        success_url=f"{APP_BASE_URL}/book-it-success",
+        cancel_url=f"{APP_BASE_URL}/book-it-support?service={service}",
+    )
+    return redirect(checkout_session.url, code=303)
+
+
+@app.route("/book-it-success")
+def book_it_success():
+    return render_template("book_it_success.html")
+
+
 @app.route("/schedule")
 def schedule():
     """Gate the Cal.com booking link behind a valid paid session token."""
@@ -1496,6 +1564,29 @@ def webhook():
                 price        = "$299",
                 upsell_title = "Your Fix Session is included free.",
                 upsell_note  = "After your in-person scan, if we find malware or vulnerabilities, we fix everything before we leave — same day, no extra charge. We'll send you the Fix Session booking link once your scan is confirmed.",
+            )
+        elif meta.get("product") == "it_support":
+            name         = meta.get("customer_name", "")
+            email        = meta.get("email", "")
+            service_name = meta.get("service_name", "IT Support")
+            service_key  = meta.get("service", "")
+            price_labels = {"quick_fix": "$99", "tune_up": "$199", "fresh_device": "$249", "new_setup": "$299"}
+            price_label  = price_labels.get(service_key, f"${sess.get('amount_total', 9900) / 100:.0f}")
+            save_service_booking({
+                "session_id": sess["id"],
+                "service":    service_name,
+                "name":       name,
+                "email":      email,
+                "phone":      meta.get("phone", ""),
+                "paid_at":    datetime.now().strftime("%d %b %Y %H:%M"),
+                "amount":     f"${sess.get('amount_total', 9900) / 100:.2f} AUD",
+            })
+            send_booking_confirmation(
+                to_email     = email,
+                name         = name,
+                service_name = service_name,
+                cal_link     = "https://cal.com/cybersurf/it-support",
+                price        = price_label,
             )
         else:
             save_order({
