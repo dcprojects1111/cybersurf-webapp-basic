@@ -1360,6 +1360,27 @@ def book_fix_session_success():
     return render_template("book_fix_session_success.html")
 
 
+@app.route("/schedule")
+def schedule():
+    """Gate the Cal.com booking link behind a valid paid session token."""
+    token = request.args.get("token", "").strip()
+    if not token or not DATABASE_URL:
+        return render_template("payment_required.html")
+    try:
+        with get_db() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT service FROM service_bookings WHERE session_id = %s AND paid_at IS NOT NULL",
+                    (token,)
+                )
+                row = cur.fetchone()
+    except Exception:
+        return render_template("payment_required.html")
+    if not row:
+        return render_template("payment_required.html")
+    return redirect("https://cal.com/cybersurf/home-security-scan")
+
+
 @app.route("/webhook", methods=["POST"])
 def webhook():
     payload    = request.get_data()
@@ -1451,7 +1472,7 @@ def webhook():
                 to_email     = email,
                 name         = name,
                 service_name = service_label,
-                cal_link     = "https://cal.com/cybersurf/home-security-scan",
+                cal_link     = f"{APP_BASE_URL}/schedule?token={sess['id']}",
                 price        = price_label,
                 upsell_note  = "If we find malware or vulnerabilities, we can fix everything before we leave — $149, payable on the day. Or next time, consider the Complete Home Security Check ($299) which includes the Fix Session free. Just reply to this email to add it on.",
             )
@@ -1471,7 +1492,7 @@ def webhook():
                 to_email     = email,
                 name         = name,
                 service_name = "Complete Home Security Check",
-                cal_link     = "https://cal.com/cybersurf/home-security-scan",
+                cal_link     = f"{APP_BASE_URL}/schedule?token={sess['id']}",
                 price        = "$299",
                 upsell_title = "Your Fix Session is included free.",
                 upsell_note  = "After your in-person scan, if we find malware or vulnerabilities, we fix everything before we leave — same day, no extra charge. We'll send you the Fix Session booking link once your scan is confirmed.",
