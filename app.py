@@ -1370,7 +1370,7 @@ def checkout_fix_session():
                                spots_remaining=remaining, total_spots=FREE_FIX_SLOTS)
 
     if not session_type:
-        return render_template("book_fix_session.html", error="Please select Zoom or in-person.",
+        return render_template("book_fix_session.html", error="Please select online or in-person.",
                                spots_remaining=remaining, total_spots=FREE_FIX_SLOTS)
 
     import uuid
