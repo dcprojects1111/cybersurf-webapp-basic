@@ -1258,7 +1258,7 @@ def checkout_home_scan():
             "device_tier":   device_tier,
             "price_label":   price_label,
         },
-        success_url=f"{APP_BASE_URL}/book-home-scan-success",
+        success_url="https://cal.com/cybersurf/home-scan-inperson",
         cancel_url=f"{APP_BASE_URL}/book-home-scan",
     )
     return redirect(checkout_session.url, code=303)
@@ -1296,7 +1296,7 @@ def checkout_home_scan_bundle():
             "email":         email,
             "phone":         phone,
         },
-        success_url=f"{APP_BASE_URL}/book-home-scan-bundle-success",
+        success_url="https://cal.com/cybersurf/home-scan-inperson",
         cancel_url=f"{APP_BASE_URL}/book-home-scan-bundle",
     )
     return redirect(checkout_session.url, code=303)
