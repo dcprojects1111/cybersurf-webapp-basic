@@ -1187,13 +1187,10 @@ def checkout_2fa():
     name         = request.form.get("name", "").strip()
     email        = request.form.get("email", "").strip()
     phone        = request.form.get("phone", "").strip()
-    session_type = request.form.get("session_type", "").strip()
+    session_type = "in-person"
 
     if not name or not email:
         return render_template("book_2fa.html", error="Name and email are required.")
-
-    if not session_type:
-        return render_template("book_2fa.html", error="Please select online or in-person.")
 
     if not TFA_PRICE_ID:
         return "2FA Activation Service is not configured yet.", 500
@@ -1370,7 +1367,7 @@ def checkout_fix_session():
                                spots_remaining=remaining, total_spots=FREE_FIX_SLOTS)
 
     if not session_type:
-        return render_template("book_fix_session.html", error="Please select online or in-person.",
+        return render_template("book_fix_session.html", error="Please select how you'd like to meet.",
                                spots_remaining=remaining, total_spots=FREE_FIX_SLOTS)
 
     import uuid
