@@ -758,7 +758,8 @@ def send_booking_confirmation(to_email, name, service_name, cal_link, price, fre
     {cancel_block}
 
     <p style="font-size:13px;color:rgba(252,253,242,.4);line-height:1.7;">
-      Questions? Reply to this email or contact
+      Questions? Reply to this email or call/text Darryl on
+      <a href="tel:0400886063" style="color:#00d2ff;">0400 886 063</a> &nbsp;·&nbsp;
       <a href="mailto:support@cybersurf.au" style="color:#00d2ff;">support@cybersurf.au</a><br/>
       CyberSurf Security &nbsp;·&nbsp; Sunshine Coast, QLD
     </p>
@@ -831,7 +832,8 @@ def send_breach_alert(to_email, name, new_sources):
     </div>
 
     <p style="font-size:13px;color:rgba(252,253,242,.4);line-height:1.7;">
-      Need help? Reply to this email or contact
+      Need help? Call/text Darryl on
+      <a href="tel:0400886063" style="color:#00d2ff;">0400 886 063</a> &nbsp;·&nbsp;
       <a href="mailto:support@cybersurf.au" style="color:#00d2ff;">support@cybersurf.au</a><br/>
       CyberSurf Security &nbsp;·&nbsp; Sunshine Coast, QLD
     </p>
@@ -895,7 +897,8 @@ def send_renewal_reminder(to_email, name, days_left):
 
     <p style="font-size:13px;color:rgba(252,253,242,.4);line-height:1.7;">
       No action needed if you don't want to continue — your monitoring will simply stop.
-      Questions? <a href="mailto:support@cybersurf.au" style="color:#00d2ff;">support@cybersurf.au</a>
+      Questions? Call/text Darryl on <a href="tel:0400886063" style="color:#00d2ff;">0400 886 063</a> &nbsp;·&nbsp;
+      <a href="mailto:support@cybersurf.au" style="color:#00d2ff;">support@cybersurf.au</a>
     </p>
   </div>
 </body></html>"""
@@ -1606,6 +1609,7 @@ def webhook():
             preferred_time = meta.get("preferred_time", "") or None
             price_labels   = {"quick_fix": "$99", "tune_up": "$199", "fresh_device": "$249", "new_setup": "$299"}
             price_label    = price_labels.get(service_key, f"${sess.get('amount_total', 9900) / 100:.0f}")
+            cal_link       = "https://cal.com/cybersurf/quick-fix-help" if service_key == "quick_fix" else None
             save_service_booking({
                 "session_id":     sess["id"],
                 "service":        service_name,
@@ -1620,9 +1624,9 @@ def webhook():
                 to_email       = email,
                 name           = name,
                 service_name   = service_name,
-                cal_link       = None,
+                cal_link       = cal_link,
                 price          = price_label,
-                in_person      = True,
+                in_person      = service_key != "quick_fix",
                 preferred_time = preferred_time,
             )
         else:
