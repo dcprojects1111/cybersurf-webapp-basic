@@ -51,8 +51,7 @@ IT_TUNEUP_PRICE_ID   = os.environ.get("IT_TUNEUP_PRICE_ID", "")   # Home Tech Tu
 IT_NEWSETUP_PRICE_ID = os.environ.get("IT_NEWSETUP_PRICE_ID", "") # New Home Tech Setup — $299
 IT_FRESH_PRICE_ID    = os.environ.get("IT_FRESH_PRICE_ID", "")    # Fresh Device Setup — $249
 
-# Fix Session launch offer
-FREE_FIX_SLOTS = int(os.environ.get("FREE_FIX_SLOTS", "7"))
+FIX_SESSION_PRICE_ID = os.environ.get("FIX_SESSION_PRICE_ID", "")  # Home Security Fix Session — $149
 
 # Email alerts (SMTP)
 SMTP_HOST  = os.environ.get("SMTP_HOST", "smtp.gmail.com")
@@ -638,16 +637,6 @@ def load_service_bookings():
         return []
 
 
-def count_fix_bookings():
-    if not DATABASE_URL:
-        return 0
-    try:
-        with get_db() as conn:
-            with conn.cursor() as cur:
-                cur.execute("SELECT COUNT(*) FROM service_bookings WHERE service = 'fix_session'")
-                return cur.fetchone()[0]
-    except Exception:
-        return 0
 
 
 def complete_service_booking(booking_id):
@@ -1347,9 +1336,7 @@ def book_home_scan_bundle_success():
 
 @app.route("/book-fix-session")
 def book_fix_session():
-    used = count_fix_bookings()
-    remaining = max(0, FREE_FIX_SLOTS - used)
-    return render_template("book_fix_session.html", spots_remaining=remaining, total_spots=FREE_FIX_SLOTS)
+    return render_template("book_fix_session.html")
 
 
 @app.route("/checkout-fix-session", methods=["POST"])
@@ -1359,38 +1346,31 @@ def checkout_fix_session():
     phone        = request.form.get("phone", "").strip()
     session_type = request.form.get("session_type", "").strip()
 
-    used      = count_fix_bookings()
-    remaining = max(0, FREE_FIX_SLOTS - used)
-
     if not name or not email:
-        return render_template("book_fix_session.html", error="Name and email are required.",
-                               spots_remaining=remaining, total_spots=FREE_FIX_SLOTS)
+        return render_template("book_fix_session.html", error="Name and email are required.")
 
     if not session_type:
-        return render_template("book_fix_session.html", error="Please select how you'd like to meet.",
-                               spots_remaining=remaining, total_spots=FREE_FIX_SLOTS)
+        return render_template("book_fix_session.html", error="Please select how you'd like to meet.")
 
-    import uuid
-    save_service_booking({
-        "session_id": str(uuid.uuid4()),
-        "service":    "fix_session",
-        "name":       name,
-        "email":      email,
-        "phone":      phone,
-        "paid_at":    datetime.now().strftime("%d %b %Y %H:%M"),
-        "amount":     "FREE" if remaining > 0 else "$149",
-    })
+    if not FIX_SESSION_PRICE_ID:
+        return "Home Security Fix Session is not configured yet.", 500
 
-    send_booking_confirmation(
-        to_email     = email,
-        name         = name,
-        service_name = "Home Security Fix Session",
-        cal_link     = "https://cal.com/cybersurf/fix",
-        price        = "FREE" if remaining > 0 else "$149",
-        free         = remaining > 0,
+    checkout_session = stripe.checkout.Session.create(
+        payment_method_types=["card"],
+        line_items=[{"price": FIX_SESSION_PRICE_ID, "quantity": 1}],
+        mode="payment",
+        customer_email=email,
+        metadata={
+            "product":       "fix_session",
+            "customer_name": name,
+            "email":         email,
+            "phone":         phone,
+            "session_type":  session_type,
+        },
+        success_url=f"{APP_BASE_URL}/book-fix-session-success",
+        cancel_url=f"{APP_BASE_URL}/book-fix-session",
     )
-
-    return redirect("/book-fix-session-success")
+    return redirect(checkout_session.url, code=303)
 
 
 @app.route("/book-fix-session-success")
@@ -1598,6 +1578,25 @@ def webhook():
                 price        = "$299",
                 upsell_title = "Your Fix Session is included free.",
                 upsell_note  = "After your in-person scan, if we find malware or vulnerabilities, we fix everything before we leave — same day, no extra charge. We'll send you the Fix Session booking link once your scan is confirmed.",
+            )
+        elif meta.get("product") == "fix_session":
+            name  = meta.get("customer_name", "")
+            email = meta.get("email", "")
+            save_service_booking({
+                "session_id": sess["id"],
+                "service":    "Home Security Fix Session",
+                "name":       name,
+                "email":      email,
+                "phone":      meta.get("phone", ""),
+                "paid_at":    datetime.now().strftime("%d %b %Y %H:%M"),
+                "amount":     f"${sess.get('amount_total', 14900) / 100:.2f} AUD",
+            })
+            send_booking_confirmation(
+                to_email     = email,
+                name         = name,
+                service_name = "Home Security Fix Session",
+                cal_link     = "https://cal.com/cybersurf/fix",
+                price        = "$149",
             )
         elif meta.get("product") == "it_support":
             name           = meta.get("customer_name", "")
