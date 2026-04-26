@@ -110,29 +110,9 @@
         <div class="hint">We'll use this to confirm your appointment.</div>
       </div>
 
-      <div class="tier-group">
-        <label>How many devices to scan?</label>
+      <input type="hidden" name="device_tier" value="standard"/>
 
-        <label class="tier-option {% if preselected_tier != 'extended' %}selected{% endif %}" id="label-standard">
-          <input type="radio" name="device_tier" value="standard" {% if preselected_tier != 'extended' %}checked{% endif %} onchange="selectTier(this)"/>
-          <div>
-            <div class="tier-label">Up to 3 devices</div>
-            <div class="tier-desc">Router + up to 3 computers, phones, or tablets</div>
-          </div>
-          <div class="tier-price">$229</div>
-        </label>
-
-        <label class="tier-option {% if preselected_tier == 'extended' %}selected{% endif %}" id="label-extended">
-          <input type="radio" name="device_tier" value="extended" {% if preselected_tier == 'extended' %}checked{% endif %} onchange="selectTier(this)"/>
-          <div>
-            <div class="tier-label">Up to 6 devices</div>
-            <div class="tier-desc">Router + up to 6 computers, phones, or tablets</div>
-          </div>
-          <div class="tier-price">$269</div>
-        </label>
-      </div>
-
-      <button type="submit" id="submit-btn">Book my Home Security Scan — {% if preselected_tier == 'extended' %}$269{% else %}$229{% endif %} &rarr;</button>
+      <button type="submit" id="submit-btn">Book my Home Security Scan — $229 &rarr;</button>
     </form>
 
     <div class="consent-note">
