@@ -1471,16 +1471,12 @@ def webhook():
     payload    = request.get_data()
     sig_header = request.headers.get("Stripe-Signature", "")
 
-    if STRIPE_WEBHOOK_SECRET:
-        try:
-            event = stripe.Webhook.construct_event(payload, sig_header, STRIPE_WEBHOOK_SECRET)
-        except Exception:
-            return "", 400
-    else:
-        try:
-            event = json.loads(payload)
-        except Exception:
-            return "", 400
+    if not STRIPE_WEBHOOK_SECRET:
+        return "", 400
+    try:
+        event = stripe.Webhook.construct_event(payload, sig_header, STRIPE_WEBHOOK_SECRET)
+    except Exception:
+        return "", 400
 
     event_type = event.get("type")
 
