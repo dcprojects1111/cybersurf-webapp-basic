@@ -1609,7 +1609,13 @@ def webhook():
             preferred_time = meta.get("preferred_time", "") or None
             price_labels   = {"quick_fix": "$99", "tune_up": "$199", "fresh_device": "$249", "new_setup": "$299"}
             price_label    = price_labels.get(service_key, f"${sess.get('amount_total', 9900) / 100:.0f}")
-            cal_link       = "https://cal.com/cybersurf/quick-fix-help" if service_key == "quick_fix" else None
+            cal_links = {
+                "quick_fix":    "https://cal.com/cybersurf/quick-fix-help",
+                "tune_up":      "https://cal.com/cybersurf/home-tech-tune-up",
+                "fresh_device": "https://cal.com/cybersurf/fresh-device-setup",
+                "new_setup":    "https://cal.com/cybersurf/new-home-tech-setup",
+            }
+            cal_link = cal_links.get(service_key)
             save_service_booking({
                 "session_id":     sess["id"],
                 "service":        service_name,
@@ -1626,7 +1632,7 @@ def webhook():
                 service_name   = service_name,
                 cal_link       = cal_link,
                 price          = price_label,
-                in_person      = service_key != "quick_fix",
+                in_person      = cal_link is None,
                 preferred_time = preferred_time,
             )
         else:
