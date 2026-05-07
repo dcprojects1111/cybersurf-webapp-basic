@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>CyberSurf — Free Breach Monitoring</title>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@700;800&family=Roboto:wght@400;500&display=swap" rel="stylesheet"/>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:'Roboto',sans-serif;background:linear-gradient(160deg,#0a1628 0%,#0d2240 100%);
+         min-height:100vh;padding:40px 20px;color:#fcfdf2;}
+    .page{max-width:540px;margin:0 auto;}
+    .brand{font-family:'Montserrat',sans-serif;font-weight:800;font-size:22px;margin-bottom:4px;}
+    .brand span{color:#00d2ff;}
+    .subtitle{font-size:12px;color:rgba(0,210,255,.7);letter-spacing:1px;
+              text-transform:uppercase;margin-bottom:36px;}
+    .card{background:rgba(255,255,255,.04);border:1px solid rgba(0,210,255,.2);
+          border-radius:14px;padding:28px 32px;margin-bottom:20px;}
+    .card.green{background:rgba(0,210,100,.06);border-color:rgba(0,210,100,.3);}
+    .card.red{background:rgba(255,71,87,.06);border-color:rgba(255,71,87,.3);}
+    h1{font-family:'Montserrat',sans-serif;font-size:20px;font-weight:800;
+       color:#00d264;margin-bottom:10px;}
+    h2{font-family:'Montserrat',sans-serif;font-size:17px;font-weight:800;
+       color:#fcfdf2;margin-bottom:10px;}
+    p{font-size:14px;color:rgba(252,253,242,.75);line-height:1.7;margin-bottom:12px;}
+    .what-list{list-style:none;margin:0 0 20px;padding:0;}
+    .what-list li{font-size:13px;color:rgba(252,253,242,.7);line-height:1.8;
+                  padding-left:20px;position:relative;}
+    .what-list li::before{content:"✓";position:absolute;left:0;color:#00d264;}
+    .consent-block{background:rgba(0,0,0,.2);border:1px solid rgba(0,210,255,.15);
+                   border-radius:10px;padding:16px 20px;margin:20px 0;}
+    .consent-label{display:flex;gap:12px;align-items:flex-start;cursor:pointer;
+                   font-size:13px;color:rgba(252,253,242,.8);line-height:1.6;}
+    .consent-label input[type="checkbox"]{width:18px;height:18px;margin-top:2px;
+                                          flex-shrink:0;accent-color:#00d2ff;cursor:pointer;}
+    .btn{display:inline-block;background:linear-gradient(135deg,#00d2ff 0%,#0077be 100%);
+         color:#fff;font-family:'Montserrat',sans-serif;font-weight:800;font-size:15px;
+         padding:14px 32px;border:none;border-radius:10px;cursor:pointer;
+         text-decoration:none;margin-top:8px;}
+    .btn:hover{opacity:.9;}
+    .error-msg{background:rgba(255,71,87,.1);border:1px solid rgba(255,71,87,.3);
+               border-radius:8px;padding:12px 16px;font-size:13px;color:#ff4757;
+               margin-bottom:16px;}
+    .footer-note{font-size:12px;color:rgba(252,253,242,.3);line-height:1.7;margin-top:24px;}
+    .footer-note a{color:#00d2ff;}
+  </style>
+</head>
+<body>
+<div class="page">
+  <div class="brand">Cyber<span>Surf</span> Security</div>
+  <div class="subtitle">Free Breach Monitoring</div>
+
+  {% if invalid_link %}
+  <div class="card red">
+    <h2>This link is not valid</h2>
+    <p>This invitation link has already been used or is not valid. Each link can only be used once.</p>
+    <p>If you think this is a mistake, please contact us.</p>
+  </div>
+
+  {% elif server_error %}
+  <div class="card red">
+    <h2>Something went wrong</h2>
+    <p>We couldn't process your request. Please try again or contact us directly.</p>
+  </div>
+
+  {% elif already_enrolled %}
+  <div class="card green">
+    <h1>&#10003; You're already enrolled</h1>
+    <p>Hi {{ name }}, your email address is already being monitored. You'll receive an alert if anything changes.</p>
+    <p>One free trial is available per email address.</p>
+  </div>
+
+  {% elif enrolled %}
+  <div class="card green">
+    <h1>&#10003; Monitoring is now active</h1>
+    <p>Hi {{ name }}, you're now enrolled in 3 months of free breach monitoring.</p>
+    <p>We'll check your email address monthly against breach databases. If your details appear in a new breach, you'll get an immediate alert.</p>
+    <p>Your monitoring runs until <strong>{{ expiry.strftime('%d %B %Y') }}</strong>.</p>
+    <p>A confirmation email has been sent to you — it contains a one-click cancel link if you ever want to stop.</p>
+  </div>
+
+  {% else %}
+  <div class="card green">
+    <h1>&#10003; Your breach check was clear</h1>
+    <p>Hi {{ name }}, your email address wasn't found in any known breach databases. As a thank you for your purchase, we're offering you <strong>3 months of free breach monitoring</strong>.</p>
+    <ul class="what-list">
+      <li>Monthly check against breach databases for 90 days</li>
+      <li>Immediate email alert if your details appear in a new breach</li>
+      <li>Monitoring ends automatically after 90 days — no charge, ever</li>
+      <li>Cancel anytime with one click — data deleted immediately</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h2>Activate free monitoring</h2>
+    <p style="font-size:13px;">Your email address being monitored: <strong style="color:#00d2ff;">{{ email }}</strong></p>
+
+    {% if error %}
+    <div class="error-msg">{{ error }}</div>
+    {% endif %}
+
+    <form method="POST" action="/free-monitoring/{{ session_id }}/{{ token }}">
+      <div class="consent-block">
+        <label class="consent-label">
+          <input type="checkbox" name="consent_monitoring" value="yes" required/>
+          <span>I consent to CyberSurf storing my email address (encrypted) for the sole purpose of running monthly breach checks for 90 days. I understand my data will be permanently deleted at expiry or on cancellation, and that I will receive a maximum of one alert email per monitoring cycle plus one end-of-monitoring email. I can cancel at any time.</span>
+        </label>
+      </div>
+      <button type="submit" class="btn">Activate free monitoring &rarr;</button>
+    </form>
+  </div>
+
+  <p class="footer-note">
+    One free monitoring trial per email address. This offer is only available to customers who received a clean result.
+    Your data is encrypted at rest and never shared.
+    Questions? <a href="mailto:support@cybersurf.au">support@cybersurf.au</a> &middot;
+    <a href="tel:0400886063">0400 886 063</a><br/>
+    CyberSurf Security &middot; Sunshine Coast, QLD
+  </p>
+  {% endif %}
+
+</div>
+</body>
+</html>

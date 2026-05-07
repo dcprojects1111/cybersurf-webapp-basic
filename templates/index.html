@@ -68,7 +68,7 @@
         </div>
       </div>
       <div class="order-actions">
-        <button class="btn-run" onclick="prefill('{{ order.name }}','{{ order.email1 }}','{{ order.email2 }}')">Run Check &rarr;</button>
+        <button class="btn-run" onclick="prefill('{{ order.name }}','{{ order.email1 }}','{{ order.email2 }}','{{ order.session_id }}')">Run Check &rarr;</button>
         <form method="POST" action="/complete-order/{{ order.session_id }}" style="margin:0;">
           <button class="btn-done" type="submit" onclick="return confirm('Mark as complete and remove?')">Done</button>
         </form>
@@ -113,6 +113,7 @@
     {% if error %}<div class="error">{{ error }}</div>{% endif %}
 
     <form method="POST" action="/run-check" id="checkForm">
+      <input type="hidden" name="order_session_id" id="orderSessionId" value=""/>
       <div class="form-group">
         <label>Customer Full Name</label>
         <input type="text" name="name" placeholder="Jane Smith" required autofocus/>
@@ -144,10 +145,11 @@
       document.getElementById('submitBtn').textContent = 'Running check...';
       document.getElementById('spinner').style.display = 'block';
     });
-    function prefill(name, email1, email2) {
+    function prefill(name, email1, email2, sessionId) {
       document.querySelector('input[name="name"]').value = name;
       document.querySelector('input[name="email1"]').value = email1;
       document.querySelector('input[name="email2"]').value = email2 || '';
+      document.getElementById('orderSessionId').value = sessionId || '';
       document.querySelector('input[name="name"]').scrollIntoView({behavior:'smooth'});
     }
   </script>

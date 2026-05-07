@@ -178,11 +178,73 @@
       {% endfor %}
     </div>
 
+    {% if all_clear and order_session_id %}
+    <div id="monitoringInvitePanel"
+         style="background:rgba(0,210,100,.06);border:1px solid rgba(0,210,100,.3);
+                border-radius:14px;padding:24px 28px;margin-top:24px;margin-bottom:8px;">
+      <div style="font-family:'Montserrat',sans-serif;font-size:13px;font-weight:800;
+                  letter-spacing:1px;text-transform:uppercase;color:#00d264;margin-bottom:8px;">
+        &#10003; CLEAR result — offer free monitoring
+      </div>
+      <p style="font-size:13px;color:rgba(252,253,242,.65);line-height:1.7;margin:0 0 16px;">
+        This customer got a clean result. Send them a free 90-day monitoring invitation — they opt in themselves
+        via a personalised link. One click here sends the invite email.
+      </p>
+      <button onclick="sendMonitoringInvite()"
+              id="monitoringInviteBtn"
+              style="background:linear-gradient(135deg,#00d264 0%,#00a050 100%);
+                     color:#fff;font-family:'Montserrat',sans-serif;font-weight:800;
+                     font-size:13px;padding:11px 22px;border:none;border-radius:8px;
+                     cursor:pointer;">
+        Send free monitoring invite &rarr;
+      </button>
+      <div id="monitoringInviteStatus" style="margin-top:12px;font-size:13px;display:none;"></div>
+    </div>
+    {% endif %}
+
     <a href="/" class="btn-new">&#43; Run Another Check</a>
 
   </div>
 
   <script>
+    {% if all_clear and order_session_id %}
+    function sendMonitoringInvite() {
+      var btn = document.getElementById('monitoringInviteBtn');
+      var status = document.getElementById('monitoringInviteStatus');
+      btn.disabled = true;
+      btn.textContent = 'Sending...';
+      fetch('/send-monitoring-invite', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+        body: 'session_id={{ order_session_id }}'
+      })
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        status.style.display = 'block';
+        if (data.status === 'sent') {
+          status.style.color = '#00d264';
+          status.textContent = '✓ Invite sent to ' + data.to;
+          btn.textContent = 'Invite sent';
+        } else if (data.status === 'already_enrolled') {
+          status.style.color = '#00d2ff';
+          status.textContent = '✓ This customer is already enrolled in monitoring.';
+          btn.textContent = 'Already enrolled';
+        } else {
+          status.style.color = '#ff4757';
+          status.textContent = 'Error: ' + (data.error || 'Unknown error');
+          btn.disabled = false;
+          btn.textContent = 'Retry';
+        }
+      })
+      .catch(function() {
+        status.style.display = 'block';
+        status.style.color = '#ff4757';
+        status.textContent = 'Network error — try again';
+        btn.disabled = false;
+        btn.textContent = 'Retry';
+      });
+    }
+    {% endif %}
     function copyLink() {
       const input = document.getElementById('shareLink');
       navigator.clipboard.writeText(input.value).then(() => {

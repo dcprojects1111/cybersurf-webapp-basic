@@ -13,7 +13,10 @@ import stripe
 import requests
 import psycopg2
 import psycopg2.extras
-from datetime import datetime
+from datetime import datetime, timedelta
+import hmac as _hmac
+import base64
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from collections import defaultdict
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -59,6 +62,10 @@ SMTP_PORT  = int(os.environ.get("SMTP_PORT", "587"))
 SMTP_USER  = os.environ.get("SMTP_USER", "")
 SMTP_PASS  = os.environ.get("SMTP_PASS", "")
 FROM_EMAIL = os.environ.get("FROM_EMAIL", "noreply@cybersurf.au")
+
+# Free 90-day breach monitoring (post-clean-result opt-in)
+# Generate key: python -c "import os,base64; print(base64.urlsafe_b64encode(os.urandom(32)).decode())"
+MONITORING_ENCRYPT_KEY = os.environ.get("MONITORING_ENCRYPT_KEY", "")
 
 if STRIPE_SECRET_KEY:
     stripe.api_key = STRIPE_SECRET_KEY
@@ -124,6 +131,22 @@ def init_db():
                     last_breach_hash       TEXT,
                     reminder_55_sent       BOOLEAN DEFAULT FALSE,
                     reminder_60_sent       BOOLEAN DEFAULT FALSE
+                )
+            """)
+            cur.execute("""
+                CREATE TABLE IF NOT EXISTS monitoring_subscribers (
+                    id                  SERIAL PRIMARY KEY,
+                    order_id            TEXT,
+                    email_encrypted     BYTEA    NOT NULL,
+                    email_hash          TEXT     NOT NULL,
+                    name                TEXT,
+                    consent_captured_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    initial_check_hash  TEXT     NOT NULL,
+                    status              TEXT     NOT NULL DEFAULT 'active',
+                    next_check_date     DATE     NOT NULL,
+                    expiry_date         DATE     NOT NULL,
+                    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    cancel_token        TEXT     NOT NULL UNIQUE
                 )
             """)
 
@@ -977,6 +1000,450 @@ def breach_hash(results):
     return hashlib.sha256("|".join(sources).encode()).hexdigest()
 
 
+# ─────────────────────────── Free Monitoring — Crypto & Tokens ───────────────
+
+def _get_encrypt_key():
+    if not MONITORING_ENCRYPT_KEY:
+        raise RuntimeError("MONITORING_ENCRYPT_KEY is not set in environment variables.")
+    return base64.urlsafe_b64decode(MONITORING_ENCRYPT_KEY + "==")[:32]
+
+
+def encrypt_email(email):
+    key    = _get_encrypt_key()
+    aesgcm = AESGCM(key)
+    nonce  = os.urandom(12)
+    ct     = aesgcm.encrypt(nonce, email.encode("utf-8"), None)
+    return nonce + ct
+
+
+def decrypt_email(ciphertext_bytes):
+    key    = _get_encrypt_key()
+    aesgcm = AESGCM(key)
+    nonce  = ciphertext_bytes[:12]
+    ct     = ciphertext_bytes[12:]
+    return aesgcm.decrypt(nonce, ct, None).decode("utf-8")
+
+
+def make_email_hash(email):
+    return hashlib.sha256(email.lower().strip().encode()).hexdigest()
+
+
+def make_cancel_token(subscriber_id):
+    key = (MONITORING_ENCRYPT_KEY or "no-key-set").encode()
+    sig = _hmac.new(key, str(subscriber_id).encode(), hashlib.sha256).hexdigest()
+    return f"{subscriber_id}.{sig}"
+
+
+def verify_cancel_token(token):
+    try:
+        sub_id_str, sig = token.split(".", 1)
+        expected = make_cancel_token(int(sub_id_str))
+        if not _hmac.compare_digest(token, expected):
+            return None
+        return int(sub_id_str)
+    except Exception:
+        return None
+
+
+def make_invite_token(session_id):
+    key = (MONITORING_ENCRYPT_KEY or "no-key-set").encode()
+    return _hmac.new(key, session_id.encode(), hashlib.sha256).hexdigest()[:32]
+
+
+def verify_invite_token(session_id, token):
+    expected = make_invite_token(session_id)
+    return _hmac.compare_digest(token, expected)
+
+
+# ─────────────────────────── Free Monitoring — Emails ────────────────────────
+
+def send_monitoring_invite(to_email, name, invite_url):
+    if not SMTP_USER or not SMTP_PASS:
+        return False, "SMTP not configured"
+    try:
+        body_html = f"""<!DOCTYPE html>
+<html><head><meta charset="UTF-8"/></head>
+<body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;
+             background:#0a1628;color:#fcfdf2;padding:40px 20px;margin:0;">
+  <div style="max-width:520px;margin:0 auto;">
+    <div style="font-size:22px;font-weight:800;margin-bottom:4px;">
+      Cyber<span style="color:#00d2ff;">Surf</span> Security
+    </div>
+    <div style="font-size:12px;color:rgba(0,210,255,.7);letter-spacing:1px;
+                text-transform:uppercase;margin-bottom:28px;">Free Breach Monitoring — Your Invitation</div>
+    <div style="background:rgba(0,210,100,.06);border:1px solid rgba(0,210,100,.3);
+                border-radius:12px;padding:24px 28px;margin-bottom:24px;">
+      <div style="font-size:16px;font-weight:700;color:#00d264;margin-bottom:8px;">
+        &#10003; Your breach check came back clear
+      </div>
+      <p style="font-size:14px;color:rgba(252,253,242,.75);line-height:1.6;margin:0 0 16px;">
+        Hi {name}, great news — your email address wasn't found in any known breach databases.
+        As a thank you for your purchase, we'd like to offer you <strong style="color:#fcfdf2;">3 months of free breach monitoring</strong> at no cost.
+      </p>
+      <p style="font-size:13px;color:rgba(252,253,242,.55);line-height:1.6;margin:0 0 20px;">
+        If your details appear in a new breach, you'll get an immediate email alert so you can change passwords fast.
+        No credit card. No obligation. Cancel anytime with one click.
+      </p>
+      <a href="{invite_url}"
+         style="display:inline-block;background:linear-gradient(135deg,#00d2ff 0%,#0077be 100%);
+                color:#fff;font-weight:800;font-size:14px;padding:12px 28px;
+                border-radius:8px;text-decoration:none;">
+        Activate Free Monitoring &rarr;
+      </a>
+    </div>
+    <div style="background:rgba(255,255,255,.04);border:1px solid rgba(0,210,255,.15);
+                border-radius:12px;padding:20px 24px;margin-bottom:24px;">
+      <p style="font-size:13px;font-weight:700;color:#00d2ff;
+                text-transform:uppercase;letter-spacing:1px;margin-bottom:12px;">How it works</p>
+      <ol style="margin:0 0 0 18px;font-size:13px;color:rgba(252,253,242,.7);line-height:1.9;padding:0;">
+        <li>Click the button above and tick the consent box — takes 30 seconds</li>
+        <li>We run a monthly check against breach databases for 90 days</li>
+        <li>If your email appears in a new breach, you'll get an immediate alert</li>
+        <li>Monitoring ends automatically after 90 days — no charge, no surprises</li>
+      </ol>
+    </div>
+    <p style="font-size:12px;color:rgba(252,253,242,.3);line-height:1.7;">
+      This invitation expires after use. One free trial per email address.<br/>
+      Questions? <a href="mailto:support@cybersurf.au" style="color:#00d2ff;">support@cybersurf.au</a>
+      &nbsp;&middot;&nbsp; <a href="tel:0400886063" style="color:#00d2ff;">0400 886 063</a><br/>
+      CyberSurf Security &nbsp;&middot;&nbsp; Sunshine Coast, QLD
+    </p>
+  </div>
+</body></html>"""
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = "CyberSurf — Claim your 3 months of free breach monitoring"
+        msg["From"]    = f"CyberSurf Security <{FROM_EMAIL}>"
+        msg["To"]      = to_email
+        msg.attach(MIMEText(body_html, "html"))
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
+            server.starttls()
+            server.login(SMTP_USER, SMTP_PASS)
+            server.sendmail(FROM_EMAIL, to_email, msg.as_string())
+        return True, None
+    except Exception as e:
+        return False, str(e)
+
+
+def send_monitoring_enrolled(to_email, name, cancel_url, expiry_date):
+    if not SMTP_USER or not SMTP_PASS:
+        return False, "SMTP not configured"
+    try:
+        expiry_str = expiry_date.strftime("%d %B %Y")
+        body_html = f"""<!DOCTYPE html>
+<html><head><meta charset="UTF-8"/></head>
+<body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;
+             background:#0a1628;color:#fcfdf2;padding:40px 20px;margin:0;">
+  <div style="max-width:520px;margin:0 auto;">
+    <div style="font-size:22px;font-weight:800;margin-bottom:4px;">
+      Cyber<span style="color:#00d2ff;">Surf</span> Security
+    </div>
+    <div style="font-size:12px;color:rgba(0,210,255,.7);letter-spacing:1px;
+                text-transform:uppercase;margin-bottom:28px;">Breach Monitoring — Active</div>
+    <div style="background:rgba(0,210,100,.06);border:1px solid rgba(0,210,100,.3);
+                border-radius:12px;padding:24px 28px;margin-bottom:24px;">
+      <div style="font-size:16px;font-weight:700;color:#00d264;margin-bottom:8px;">
+        &#10003; You're now protected
+      </div>
+      <p style="font-size:14px;color:rgba(252,253,242,.75);line-height:1.6;margin:0;">
+        Hi {name}, your free breach monitoring is now active. We'll check your email address
+        against breach databases monthly and alert you immediately if anything changes.
+        Your monitoring runs until <strong style="color:#fcfdf2;">{expiry_str}</strong>.
+      </p>
+    </div>
+    <div style="background:rgba(255,255,255,.04);border:1px solid rgba(0,210,255,.15);
+                border-radius:12px;padding:20px 24px;margin-bottom:24px;">
+      <p style="font-size:13px;font-weight:700;color:#00d2ff;
+                text-transform:uppercase;letter-spacing:1px;margin-bottom:12px;">What happens next</p>
+      <ol style="margin:0 0 0 18px;font-size:13px;color:rgba(252,253,242,.7);line-height:1.9;padding:0;">
+        <li>Monthly check runs automatically — no action needed</li>
+        <li>If a new breach is found, you'll receive an immediate alert email</li>
+        <li>Monitoring ends automatically on {expiry_str} — we'll notify you</li>
+        <li>No charge at expiry — this is completely free</li>
+      </ol>
+    </div>
+    <p style="font-size:12px;color:rgba(252,253,242,.3);line-height:1.7;">
+      Changed your mind? <a href="{cancel_url}" style="color:#00d2ff;">Cancel monitoring here</a>
+      — your data is deleted immediately.<br/>
+      Questions? <a href="mailto:support@cybersurf.au" style="color:#00d2ff;">support@cybersurf.au</a>
+      &nbsp;&middot;&nbsp; <a href="tel:0400886063" style="color:#00d2ff;">0400 886 063</a><br/>
+      CyberSurf Security &nbsp;&middot;&nbsp; Sunshine Coast, QLD
+    </p>
+  </div>
+</body></html>"""
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = "CyberSurf — Your free breach monitoring is now active"
+        msg["From"]    = f"CyberSurf Security <{FROM_EMAIL}>"
+        msg["To"]      = to_email
+        msg.attach(MIMEText(body_html, "html"))
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
+            server.starttls()
+            server.login(SMTP_USER, SMTP_PASS)
+            server.sendmail(FROM_EMAIL, to_email, msg.as_string())
+        return True, None
+    except Exception as e:
+        return False, str(e)
+
+
+def send_free_monitoring_alert(to_email, name, new_sources, cancel_url):
+    if not SMTP_USER or not SMTP_PASS:
+        return False, "SMTP not configured"
+    try:
+        sources_html = "".join(
+            f'<li style="margin-bottom:6px;color:rgba(252,253,242,.8);">{s}</li>'
+            for s in new_sources
+        )
+        body_html = f"""<!DOCTYPE html>
+<html><head><meta charset="UTF-8"/></head>
+<body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;
+             background:#0a1628;color:#fcfdf2;padding:40px 20px;margin:0;">
+  <div style="max-width:520px;margin:0 auto;">
+    <div style="font-size:22px;font-weight:800;margin-bottom:4px;">
+      Cyber<span style="color:#00d2ff;">Surf</span> Security
+    </div>
+    <div style="font-size:12px;color:rgba(0,210,255,.7);letter-spacing:1px;
+                text-transform:uppercase;margin-bottom:28px;">Breach Monitoring Alert</div>
+    <div style="background:rgba(255,71,87,.1);border:1px solid rgba(255,71,87,.35);
+                border-radius:12px;padding:24px 28px;margin-bottom:24px;">
+      <div style="font-size:16px;font-weight:700;color:#ff4757;margin-bottom:8px;">
+        &#9888; New breach detected
+      </div>
+      <p style="font-size:14px;color:rgba(252,253,242,.75);line-height:1.6;margin:0;">
+        Hi {name}, your free breach monitoring check found your details in a new data breach.
+        Your information was found in:
+      </p>
+      <ul style="margin:14px 0 0 18px;font-size:14px;line-height:1.8;">
+        {sources_html}
+      </ul>
+    </div>
+    <div style="background:rgba(255,255,255,.04);border:1px solid rgba(0,210,255,.15);
+                border-radius:12px;padding:20px 24px;margin-bottom:24px;">
+      <p style="font-size:13px;font-weight:700;color:#00d2ff;
+                text-transform:uppercase;letter-spacing:1px;margin-bottom:12px;">What to do right now</p>
+      <ol style="margin:0 0 0 18px;font-size:13px;color:rgba(252,253,242,.7);line-height:1.9;padding:0;">
+        <li>Change your password on the affected account immediately</li>
+        <li>Change it on any other account using the same password</li>
+        <li>Enable two-factor authentication (2FA) on your email and banking</li>
+        <li>Check for suspicious login activity on your accounts</li>
+      </ol>
+    </div>
+    <p style="font-size:12px;color:rgba(252,253,242,.3);line-height:1.7;">
+      Need help? Call/text Darryl on
+      <a href="tel:0400886063" style="color:#00d2ff;">0400 886 063</a> &nbsp;&middot;&nbsp;
+      <a href="mailto:support@cybersurf.au" style="color:#00d2ff;">support@cybersurf.au</a><br/>
+      <a href="{cancel_url}" style="color:rgba(252,253,242,.3);">Cancel monitoring</a> — your data will be deleted immediately.<br/>
+      CyberSurf Security &nbsp;&middot;&nbsp; Sunshine Coast, QLD
+    </p>
+  </div>
+</body></html>"""
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = "CyberSurf Alert — New breach detected on your monitored address"
+        msg["From"]    = f"CyberSurf Security <{FROM_EMAIL}>"
+        msg["To"]      = to_email
+        msg.attach(MIMEText(body_html, "html"))
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
+            server.starttls()
+            server.login(SMTP_USER, SMTP_PASS)
+            server.sendmail(FROM_EMAIL, to_email, msg.as_string())
+        return True, None
+    except Exception as e:
+        return False, str(e)
+
+
+def send_monitoring_ended(to_email, name):
+    if not SMTP_USER or not SMTP_PASS:
+        return False, "SMTP not configured"
+    try:
+        body_html = f"""<!DOCTYPE html>
+<html><head><meta charset="UTF-8"/></head>
+<body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;
+             background:#0a1628;color:#fcfdf2;padding:40px 20px;margin:0;">
+  <div style="max-width:520px;margin:0 auto;">
+    <div style="font-size:22px;font-weight:800;margin-bottom:4px;">
+      Cyber<span style="color:#00d2ff;">Surf</span> Security
+    </div>
+    <div style="font-size:12px;color:rgba(0,210,255,.7);letter-spacing:1px;
+                text-transform:uppercase;margin-bottom:28px;">Breach Monitoring — Ended</div>
+    <div style="background:rgba(0,210,255,.06);border:1px solid rgba(0,210,255,.25);
+                border-radius:12px;padding:24px 28px;margin-bottom:24px;">
+      <div style="font-size:16px;font-weight:700;color:#fcfdf2;margin-bottom:8px;">
+        Your 3-month free monitoring has ended
+      </div>
+      <p style="font-size:14px;color:rgba(252,253,242,.75);line-height:1.6;margin:0 0 16px;">
+        Hi {name}, your complimentary 90-day breach monitoring period has now ended and
+        all data we held has been permanently deleted. No breach alerts were triggered during
+        your monitoring period.
+      </p>
+      <p style="font-size:14px;color:rgba(252,253,242,.75);line-height:1.6;margin:0 0 20px;">
+        To continue being protected, you can subscribe to Dark Web Monitoring for $15/month.
+      </p>
+      <a href="{APP_BASE_URL}/dark-web-monitoring"
+         style="display:inline-block;background:linear-gradient(135deg,#00d2ff 0%,#0077be 100%);
+                color:#fff;font-weight:800;font-size:14px;padding:12px 28px;
+                border-radius:8px;text-decoration:none;">
+        Continue for $15/month &rarr;
+      </a>
+    </div>
+    <p style="font-size:12px;color:rgba(252,253,242,.3);line-height:1.7;">
+      Questions? <a href="mailto:support@cybersurf.au" style="color:#00d2ff;">support@cybersurf.au</a>
+      &nbsp;&middot;&nbsp; <a href="tel:0400886063" style="color:#00d2ff;">0400 886 063</a><br/>
+      CyberSurf Security &nbsp;&middot;&nbsp; Sunshine Coast, QLD
+    </p>
+  </div>
+</body></html>"""
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = "CyberSurf — Your free breach monitoring has ended"
+        msg["From"]    = f"CyberSurf Security <{FROM_EMAIL}>"
+        msg["To"]      = to_email
+        msg.attach(MIMEText(body_html, "html"))
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
+            server.starttls()
+            server.login(SMTP_USER, SMTP_PASS)
+            server.sendmail(FROM_EMAIL, to_email, msg.as_string())
+        return True, None
+    except Exception as e:
+        return False, str(e)
+
+
+def send_monitoring_cancelled(to_email, name):
+    if not SMTP_USER or not SMTP_PASS:
+        return False, "SMTP not configured"
+    try:
+        body_html = f"""<!DOCTYPE html>
+<html><head><meta charset="UTF-8"/></head>
+<body style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;
+             background:#0a1628;color:#fcfdf2;padding:40px 20px;margin:0;">
+  <div style="max-width:520px;margin:0 auto;">
+    <div style="font-size:22px;font-weight:800;margin-bottom:4px;">
+      Cyber<span style="color:#00d2ff;">Surf</span> Security
+    </div>
+    <div style="font-size:12px;color:rgba(0,210,255,.7);letter-spacing:1px;
+                text-transform:uppercase;margin-bottom:28px;">Monitoring Cancelled</div>
+    <div style="background:rgba(255,255,255,.04);border:1px solid rgba(0,210,255,.15);
+                border-radius:12px;padding:24px 28px;margin-bottom:24px;">
+      <div style="font-size:16px;font-weight:700;color:#fcfdf2;margin-bottom:8px;">
+        Monitoring cancelled &amp; data deleted
+      </div>
+      <p style="font-size:14px;color:rgba(252,253,242,.75);line-height:1.6;margin:0;">
+        Hi {name}, your breach monitoring has been cancelled and your data has been permanently deleted.
+        No further checks will be run and you won't receive any more alerts from this service.
+      </p>
+    </div>
+    <p style="font-size:12px;color:rgba(252,253,242,.3);line-height:1.7;">
+      Questions? <a href="mailto:support@cybersurf.au" style="color:#00d2ff;">support@cybersurf.au</a>
+      &nbsp;&middot;&nbsp; <a href="tel:0400886063" style="color:#00d2ff;">0400 886 063</a><br/>
+      CyberSurf Security &nbsp;&middot;&nbsp; Sunshine Coast, QLD
+    </p>
+  </div>
+</body></html>"""
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = "CyberSurf — Monitoring cancelled, data deleted"
+        msg["From"]    = f"CyberSurf Security <{FROM_EMAIL}>"
+        msg["To"]      = to_email
+        msg.attach(MIMEText(body_html, "html"))
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
+            server.starttls()
+            server.login(SMTP_USER, SMTP_PASS)
+            server.sendmail(FROM_EMAIL, to_email, msg.as_string())
+        return True, None
+    except Exception as e:
+        return False, str(e)
+
+
+# ─────────────────────────── Free Monitoring — Monthly Check ─────────────────
+
+def run_free_monitoring_checks():
+    if not DATABASE_URL:
+        return {"checked": 0, "alerts": 0, "expired": 0, "errors": []}
+
+    summary = {"checked": 0, "alerts": 0, "expired": 0, "errors": []}
+    today   = datetime.now().date()
+
+    try:
+        with get_db() as conn:
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                cur.execute("""
+                    SELECT * FROM monitoring_subscribers
+                    WHERE status = 'active'
+                    AND next_check_date <= %s
+                """, (today,))
+                subs = [dict(r) for r in cur.fetchall()]
+    except Exception as e:
+        summary["errors"].append(f"DB query failed: {e}")
+        return summary
+
+    for sub in subs:
+        sub_id = sub["id"]
+        try:
+            if sub["expiry_date"] <= today:
+                email = decrypt_email(bytes(sub["email_encrypted"]))
+                with get_db() as conn:
+                    with conn.cursor() as cur:
+                        cur.execute("DELETE FROM monitoring_subscribers WHERE id = %s", (sub_id,))
+                send_monitoring_ended(email, sub["name"] or "there")
+                summary["expired"] += 1
+                continue
+
+            email = decrypt_email(bytes(sub["email_encrypted"]))
+
+            try:
+                data     = query_dehashed(email)
+                total    = data.get("total", 0)
+                entries  = data.get("entries") or []
+                breaches = process_entries(entries)
+                any_pw   = any(
+                    "password" in f or "hashed password" in f
+                    for info in breaches.values() for f in info["exposed_fields"]
+                )
+                risk, risk_desc = risk_level(total, any_pw)
+                results = [{"email": email, "total": total,
+                            "breaches": breaches, "risk": (risk, risk_desc)}]
+            except DehashedUnavailable:
+                summary["errors"].append(f"Dehashed unavailable — skipped sub {sub_id}")
+                continue
+            except Exception as e:
+                summary["errors"].append(f"sub {sub_id} API error: {e}")
+                continue
+
+            new_hash = breach_hash(results)
+            old_hash = sub["initial_check_hash"] or ""
+
+            if new_hash != old_hash:
+                new_sources = [
+                    f"{r['email']} — {source}"
+                    for r in results
+                    for source in r["breaches"].keys()
+                ]
+                cancel_url = f"{APP_BASE_URL}/cancel-monitoring?token={sub['cancel_token']}"
+                ok, err = send_free_monitoring_alert(
+                    email, sub["name"] or "there", new_sources, cancel_url
+                )
+                if ok:
+                    with get_db() as conn:
+                        with conn.cursor() as cur:
+                            cur.execute(
+                                "UPDATE monitoring_subscribers SET status = 'notified' WHERE id = %s",
+                                (sub_id,)
+                            )
+                    summary["alerts"] += 1
+                else:
+                    summary["errors"].append(f"alert email for sub {sub_id}: {err}")
+            else:
+                next_check = today + timedelta(days=30)
+                with get_db() as conn:
+                    with conn.cursor() as cur:
+                        cur.execute(
+                            "UPDATE monitoring_subscribers SET next_check_date = %s WHERE id = %s",
+                            (next_check, sub_id)
+                        )
+
+            summary["checked"] += 1
+
+        except Exception as e:
+            summary["errors"].append(f"sub {sub_id} unexpected error: {e}")
+
+    return summary
+
+
 # ─────────────────────────── Monitoring Run ───────────────────────────────
 
 @app.route("/run-monitoring")
@@ -1037,7 +1504,208 @@ def run_monitoring():
     summary["renewal_reminders_sent"] = renewal["reminders_sent"]
     summary["errors"] += renewal["errors"]
 
+    free_mon = run_free_monitoring_checks()
+    summary["free_monitoring_checked"] = free_mon["checked"]
+    summary["free_monitoring_alerts"]  = free_mon["alerts"]
+    summary["free_monitoring_expired"] = free_mon["expired"]
+    summary["errors"] += free_mon["errors"]
+
     return jsonify(summary), 200
+
+
+# ─────────────────────────── Free Monitoring — Routes ────────────────────────
+
+@app.route("/send-monitoring-invite", methods=["POST"])
+def send_monitoring_invite_route():
+    auth = require_auth()
+    if auth: return auth
+
+    session_id = request.form.get("session_id", "").strip()
+    if not session_id:
+        return jsonify({"error": "session_id required"}), 400
+
+    try:
+        with get_db() as conn:
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                cur.execute("SELECT * FROM orders WHERE session_id = %s", (session_id,))
+                order = cur.fetchone()
+                if order:
+                    order = dict(order)
+    except Exception as e:
+        return jsonify({"error": f"DB error: {e}"}), 500
+
+    if not order:
+        return jsonify({"error": "Order not found"}), 404
+
+    email = order.get("email1", "")
+    name  = order.get("name") or "there"
+
+    if not email:
+        return jsonify({"error": "No email on order"}), 400
+
+    h = make_email_hash(email)
+    try:
+        with get_db() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT id FROM monitoring_subscribers WHERE email_hash = %s AND status NOT IN ('expired','cancelled')",
+                    (h,)
+                )
+                existing = cur.fetchone()
+    except Exception as e:
+        return jsonify({"error": f"DB error: {e}"}), 500
+
+    if existing:
+        return jsonify({"status": "already_enrolled"}), 200
+
+    token      = make_invite_token(session_id)
+    invite_url = f"{APP_BASE_URL}/free-monitoring/{session_id}/{token}"
+
+    ok, err = send_monitoring_invite(email, name, invite_url)
+    if ok:
+        return jsonify({"status": "sent", "to": email}), 200
+    else:
+        return jsonify({"error": err}), 500
+
+
+@app.route("/free-monitoring/<session_id>/<token>", methods=["GET", "POST"])
+def free_monitoring_optin(session_id, token):
+    if not verify_invite_token(session_id, token):
+        return render_template("free_monitoring_optin.html", invalid_link=True), 400
+
+    try:
+        with get_db() as conn:
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                cur.execute("SELECT * FROM orders WHERE session_id = %s", (session_id,))
+                order = cur.fetchone()
+                if order:
+                    order = dict(order)
+    except Exception:
+        return render_template("free_monitoring_optin.html", server_error=True), 500
+
+    if not order:
+        return render_template("free_monitoring_optin.html", invalid_link=True), 404
+
+    email = order.get("email1", "")
+    name  = order.get("name") or "there"
+
+    h = make_email_hash(email)
+    try:
+        with get_db() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT id FROM monitoring_subscribers WHERE email_hash = %s AND status NOT IN ('expired','cancelled')",
+                    (h,)
+                )
+                already = cur.fetchone()
+    except Exception:
+        return render_template("free_monitoring_optin.html", server_error=True), 500
+
+    if already:
+        return render_template("free_monitoring_optin.html", already_enrolled=True, name=name)
+
+    if request.method == "POST":
+        if request.form.get("consent_monitoring") != "yes":
+            return render_template("free_monitoring_optin.html",
+                name=name, email=email, session_id=session_id, token=token,
+                error="Please tick the consent box to enrol.")
+
+        try:
+            data     = query_dehashed(email)
+            total    = data.get("total", 0)
+            entries  = data.get("entries") or []
+            breaches = process_entries(entries)
+            any_pw   = any(
+                "password" in f or "hashed password" in f
+                for info in breaches.values() for f in info["exposed_fields"]
+            )
+            risk, risk_desc = risk_level(total, any_pw)
+            results      = [{"email": email, "total": total,
+                              "breaches": breaches, "risk": (risk, risk_desc)}]
+            initial_hash = breach_hash(results)
+        except Exception:
+            initial_hash = hashlib.sha256(b"baseline-unavailable").hexdigest()
+
+        try:
+            enc_email   = encrypt_email(email)
+            today       = datetime.now().date()
+            expiry      = today + timedelta(days=90)
+            next_check  = today + timedelta(days=30)
+            consent_at  = datetime.now()
+
+            with get_db() as conn:
+                with conn.cursor() as cur:
+                    cur.execute("""
+                        INSERT INTO monitoring_subscribers
+                            (order_id, email_encrypted, email_hash, name,
+                             consent_captured_at, initial_check_hash,
+                             status, next_check_date, expiry_date, cancel_token)
+                        VALUES (%s, %s, %s, %s, %s, %s, 'active', %s, %s, 'pending')
+                        RETURNING id
+                    """, (
+                        session_id,
+                        psycopg2.Binary(enc_email),
+                        h, name, consent_at, initial_hash,
+                        next_check, expiry
+                    ))
+                    sub_id = cur.fetchone()[0]
+                    cancel_token = make_cancel_token(sub_id)
+                    cur.execute(
+                        "UPDATE monitoring_subscribers SET cancel_token = %s WHERE id = %s",
+                        (cancel_token, sub_id)
+                    )
+
+            cancel_url = f"{APP_BASE_URL}/cancel-monitoring?token={cancel_token}"
+            send_monitoring_enrolled(email, name, cancel_url, expiry)
+
+            return render_template("free_monitoring_optin.html",
+                enrolled=True, name=name, expiry=expiry)
+
+        except Exception:
+            return render_template("free_monitoring_optin.html",
+                server_error=True, name=name), 500
+
+    return render_template("free_monitoring_optin.html",
+        name=name, email=email, session_id=session_id, token=token)
+
+
+@app.route("/cancel-monitoring")
+def cancel_monitoring():
+    token  = request.args.get("token", "")
+    sub_id = verify_cancel_token(token)
+
+    if sub_id is None:
+        return render_template("cancel_monitoring.html", invalid_token=True), 400
+
+    try:
+        with get_db() as conn:
+            with conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor) as cur:
+                cur.execute(
+                    "SELECT * FROM monitoring_subscribers WHERE id = %s AND status = 'active'",
+                    (sub_id,)
+                )
+                sub = cur.fetchone()
+                if sub:
+                    sub = dict(sub)
+    except Exception:
+        return render_template("cancel_monitoring.html", server_error=True), 500
+
+    if not sub:
+        return render_template("cancel_monitoring.html", already_cancelled=True)
+
+    try:
+        email = decrypt_email(bytes(sub["email_encrypted"]))
+        name  = sub.get("name") or "there"
+
+        with get_db() as conn:
+            with conn.cursor() as cur:
+                cur.execute("DELETE FROM monitoring_subscribers WHERE id = %s", (sub_id,))
+
+        send_monitoring_cancelled(email, name)
+        return render_template("cancel_monitoring.html", cancelled=True, name=name)
+
+    except Exception:
+        return render_template("cancel_monitoring.html", server_error=True), 500
 
 
 # ─────────────────────────── Stripe ───────────────────────────────────────
@@ -1675,9 +2343,10 @@ def run_check():
     auth = require_auth()
     if auth: return auth
 
-    customer_name = request.form.get("name", "").strip()
-    email1        = request.form.get("email1", "").strip().lower()
-    email2        = request.form.get("email2", "").strip().lower()
+    customer_name    = request.form.get("name", "").strip()
+    email1           = request.form.get("email1", "").strip().lower()
+    email2           = request.form.get("email2", "").strip().lower()
+    order_session_id = request.form.get("order_session_id", "").strip()
 
     if not customer_name or not email1:
         return render_template("index.html", error="Name and at least one email are required.")
@@ -1739,6 +2408,8 @@ def run_check():
     if uploaded:
         share_link, link_error = get_pcloud_share_link(file_path)
 
+    all_clear = all(r["risk"][0] == "CLEAR" for r in results)
+
     return render_template("report.html",
         customer_name        = customer_name,
         results              = results,
@@ -1749,6 +2420,8 @@ def run_check():
         link_error           = link_error,
         balance              = balance,
         dehashed_unavailable = dehashed_unavailable,
+        order_session_id     = order_session_id,
+        all_clear            = all_clear,
     )
 
 
