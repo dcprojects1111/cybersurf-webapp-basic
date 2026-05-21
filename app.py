@@ -2453,6 +2453,12 @@ def _parse_post(filepath):
     html = _md.markdown(body) if (_MD_AVAILABLE and body) else body
     return {"slug": slug, "title": title or slug, "date": date, "content": html}
 
+@app.route("/blog/debug-path")
+def blog_debug():
+    import json
+    files = _glob.glob(os.path.join(_BLOG_DIR, "*.md"))
+    return jsonify({"blog_dir": _BLOG_DIR, "exists": os.path.isdir(_BLOG_DIR), "files": files})
+
 @app.route("/blog")
 def blog_index():
     posts = []
