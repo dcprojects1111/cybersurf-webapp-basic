@@ -2434,7 +2434,7 @@ try:
 except ImportError:
     _MD_AVAILABLE = False
 
-_BLOG_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "content", "blog")
+_BLOG_DIR = os.path.join(app.root_path, "content", "blog")
 
 def _parse_post(filepath):
     with open(filepath, "r", encoding="utf-8") as f:
