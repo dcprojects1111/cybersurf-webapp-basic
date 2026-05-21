@@ -2425,5 +2425,55 @@ def run_check():
     )
 
 
+# ── Blog ──────────────────────────────────────────────────────────────────────
+import glob as _glob
+import re as _re
+try:
+    import markdown as _md
+    _MD_AVAILABLE = True
+except ImportError:
+    _MD_AVAILABLE = False
+
+_BLOG_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "content", "blog")
+
+def _parse_post(filepath):
+    with open(filepath, "r", encoding="utf-8") as f:
+        raw = f.read()
+    title, date, body = "", "", raw
+    if raw.startswith("---"):
+        parts = raw.split("---", 2)
+        if len(parts) >= 3:
+            for line in parts[1].strip().splitlines():
+                if line.startswith("title:"):
+                    title = line[6:].strip().strip('"\'')
+                elif line.startswith("date:"):
+                    date = line[5:].strip().strip('"\'')[:10]
+            body = parts[2].strip()
+    slug = os.path.basename(filepath)[:-3]
+    html = _md.markdown(body) if (_MD_AVAILABLE and body) else body
+    return {"slug": slug, "title": title or slug, "date": date, "content": html}
+
+@app.route("/blog")
+def blog_index():
+    posts = []
+    for fp in sorted(_glob.glob(os.path.join(_BLOG_DIR, "*.md")), reverse=True):
+        if os.path.basename(fp).startswith("."):
+            continue
+        try:
+            posts.append(_parse_post(fp))
+        except Exception:
+            continue
+    return render_template("blog_list.html", posts=posts)
+
+@app.route("/blog/<slug>")
+def blog_post(slug):
+    slug = _re.sub(r"[^a-zA-Z0-9\-_]", "", slug)
+    fp = os.path.realpath(os.path.join(_BLOG_DIR, slug + ".md"))
+    if not fp.startswith(os.path.realpath(_BLOG_DIR)) or not os.path.isfile(fp):
+        return render_template("blog_list.html", posts=[], error="Post not found"), 404
+    return render_template("blog_post.html", post=_parse_post(fp))
+# ── End Blog ───────────────────────────────────────────────────────────────────
+
+
 if __name__ == "__main__":
     app.run(debug=False, host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
