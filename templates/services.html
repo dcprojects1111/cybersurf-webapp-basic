@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>CyberSurf — All Services</title>
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@700;800&family=Roboto:wght@400;500&display=swap" rel="stylesheet"/>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:'Roboto',sans-serif;background:linear-gradient(160deg,#0a1628 0%,#0d2240 100%);min-height:100vh;padding:40px 20px;color:#fcfdf2;}
+    .page{max-width:820px;margin:0 auto;}
+    .brand{font-family:'Montserrat',sans-serif;font-weight:800;font-size:20px;color:#fff;margin-bottom:40px;display:block;}
+    .brand span{color:#00d2ff;}
+    .eyebrow{font-family:'Montserrat',sans-serif;font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:rgba(0,210,255,.5);margin-bottom:12px;}
+    h1{font-family:'Montserrat',sans-serif;font-weight:800;font-size:28px;color:#fcfdf2;margin-bottom:8px;line-height:1.3;}
+    .intro{font-size:15px;color:rgba(252,253,242,.5);margin-bottom:40px;line-height:1.6;}
+    .section-title{font-family:'Montserrat',sans-serif;font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:rgba(0,210,255,.4);margin:36px 0 16px;padding-bottom:10px;border-bottom:1px solid rgba(0,210,255,.1);}
+    .services-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:8px;}
+    @media(max-width:560px){.services-grid{grid-template-columns:1fr;}}
+    .service-card{background:rgba(255,255,255,.04);border:1px solid rgba(0,210,255,.15);border-radius:14px;padding:24px 22px;display:flex;flex-direction:column;}
+    .service-card.featured{background:linear-gradient(135deg,rgba(0,210,255,.07),rgba(0,119,190,.1));border-color:rgba(0,210,255,.35);}
+    .service-card h3{font-family:'Montserrat',sans-serif;font-weight:800;font-size:15px;color:#fcfdf2;margin-bottom:6px;}
+    .service-card p{font-size:13px;color:rgba(252,253,242,.5);line-height:1.6;margin-bottom:16px;flex:1;}
+    .service-price{font-family:'Montserrat',sans-serif;font-weight:800;font-size:20px;color:#00d2ff;margin-bottom:16px;}
+    .service-price span{font-size:13px;font-weight:400;color:rgba(252,253,242,.35);}
+    .service-btn{display:block;text-align:center;background:#00d2ff;color:#0a1628;font-family:'Montserrat',sans-serif;font-weight:800;font-size:12px;padding:11px 16px;border-radius:8px;text-decoration:none;transition:opacity .15s;}
+    .service-btn:hover{opacity:.85;}
+    .service-btn.outline{background:transparent;color:#00d2ff;border:1px solid rgba(0,210,255,.35);}
+    .service-btn.outline:hover{background:rgba(0,210,255,.06);}
+    .back{display:inline-block;font-size:13px;color:rgba(0,210,255,.6);text-decoration:none;margin-bottom:32px;}
+    .back:hover{color:#00d2ff;}
+    .note{font-size:12px;color:rgba(252,253,242,.25);margin-top:6px;text-align:center;}
+  </style>
+</head>
+<body>
+<div class="page">
+  <a href="/" class="brand">Cyber<span>Surf</span> Security</a>
+  <a href="/" class="back">&larr; Back to dashboard</a>
+
+  <div class="eyebrow">Sunshine Coast</div>
+  <h1>All Services</h1>
+  <p class="intro">Everything CyberSurf offers — from a quick credential check to a full in-home security overhaul.</p>
+
+  <!-- Cyber Security -->
+  <div class="section-title">Cyber Security</div>
+  <div class="services-grid">
+    <div class="service-card featured">
+      <h3>Complete Home Security Check</h3>
+      <p>Breach report, password vault setup, 2FA on key accounts, and an in-person home scan — everything in one week.</p>
+      <div class="service-price">$299 <span>save $88</span></div>
+      <a href="/book-home-scan-bundle" class="service-btn">Get the Full Check &rarr;</a>
+    </div>
+    <div class="service-card">
+      <h3>Home Security Scan</h3>
+      <p>External network scan, router check, and device scan — plain-English report showing exactly what's exposed.</p>
+      <div class="service-price">$229</div>
+      <a href="/book-home-scan" class="service-btn outline">Book a Home Scan &rarr;</a>
+    </div>
+    <div class="service-card">
+      <h3>Lock Change</h3>
+      <p>45-minute live Zoom session — we set up your secure password vault and replace every compromised credential.</p>
+      <div class="service-price">$79</div>
+      <a href="/book-lock-change" class="service-btn outline">Book a Lock Change &rarr;</a>
+    </div>
+    <div class="service-card">
+      <h3>2FA Activation Service</h3>
+      <p>30-minute 1-on-1 session online or in person — we set up two-factor authentication on your most important accounts.</p>
+      <div class="service-price">$49</div>
+      <a href="/book-2fa" class="service-btn outline">Book your session &rarr;</a>
+    </div>
+    <div class="service-card">
+      <h3>Basic Breach Check</h3>
+      <p>Check up to 2 email addresses against criminal breach databases. Plain-English PDF report within 24 hours.</p>
+      <div class="service-price">$30</div>
+      <a href="https://cybersurf.au/#breach-check" class="service-btn outline">Check My Credentials &rarr;</a>
+    </div>
+    <div class="service-card">
+      <h3>Dark Web Monitoring</h3>
+      <p>We scan criminal breach databases every month and alert you the moment your details appear. Cancel anytime.</p>
+      <div class="service-price">$15 <span>/ month</span></div>
+      <a href="https://cybersurf.au/#monitoring" class="service-btn outline">Start Monitoring &rarr;</a>
+    </div>
+  </div>
+
+  <!-- IT Help -->
+  <div class="section-title">Home IT Help</div>
+  <div class="services-grid">
+    <div class="service-card featured">
+      <h3>Quick Fix</h3>
+      <p>Slow Wi-Fi, printer won't connect, new device setup — we fix it and check your security while we're there.</p>
+      <div class="service-price">$99</div>
+      <a href="/book-it-support" class="service-btn">Fix It Now &rarr;</a>
+    </div>
+    <div class="service-card">
+      <h3>Home Tech Tune-Up</h3>
+      <p>Full audit of your home network, devices, and security settings — then we fix everything we find.</p>
+      <div class="service-price">$199</div>
+      <a href="/book-it-support" class="service-btn outline">Book a Tune-Up &rarr;</a>
+    </div>
+    <div class="service-card">
+      <h3>New Home Tech Setup</h3>
+      <p>New router, smart TV, printer, or NAS — we set it all up securely and make sure everything talks to each other.</p>
+      <div class="service-price">$299</div>
+      <a href="/book-it-support" class="service-btn outline">Book Setup &rarr;</a>
+    </div>
+    <div class="service-card">
+      <h3>Fresh Device Setup</h3>
+      <p>New laptop or PC — we set it up from scratch, install your software, and lock down your security from day one.</p>
+      <div class="service-price">$249</div>
+      <a href="/book-it-support" class="service-btn outline">Book Device Setup &rarr;</a>
+    </div>
+  </div>
+  <p class="note">All IT help services include a free security check while we're there.</p>
+</div>
+</body>
+</html>

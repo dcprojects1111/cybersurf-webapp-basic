@@ -75,6 +75,27 @@
     .report-section h3{font-family:'Montserrat',sans-serif;font-size:12px;letter-spacing:1.5px;text-transform:uppercase;color:rgba(0,210,255,.5);margin-bottom:12px;}
     pre{font-family:'Roboto Mono','Courier New',monospace;font-size:12px;color:rgba(252,253,242,.5);white-space:pre-wrap;line-height:1.7;}
     .btn-new{display:inline-block;background:linear-gradient(135deg,#00d2ff 0%,#0077be 100%);color:#fff;font-family:'Montserrat',sans-serif;font-weight:800;font-size:14px;padding:12px 28px;border-radius:10px;text-decoration:none;margin-top:24px;}
+
+    /* Next steps upsell */
+    .next-steps{margin-top:36px;padding-top:32px;border-top:1px solid rgba(0,210,255,.12);}
+    .next-steps-eyebrow{font-family:'Montserrat',sans-serif;font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:rgba(0,210,255,.5);margin-bottom:12px;}
+    .next-steps h2{font-family:'Montserrat',sans-serif;font-weight:800;font-size:22px;color:#fcfdf2;margin-bottom:8px;line-height:1.3;}
+    .next-steps .sub{font-size:14px;color:rgba(252,253,242,.5);margin-bottom:28px;}
+    .next-options{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;}
+    @media(max-width:560px){.next-options{grid-template-columns:1fr;}}
+    .next-card{background:rgba(255,255,255,.04);border:1px solid rgba(0,210,255,.2);border-radius:16px;padding:28px 24px;display:flex;flex-direction:column;}
+    .next-card.featured{background:linear-gradient(135deg,rgba(0,210,255,.08),rgba(0,119,190,.12));border-color:rgba(0,210,255,.4);}
+    .next-card-badge{font-family:'Montserrat',sans-serif;font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:#00d2ff;margin-bottom:10px;}
+    .next-card h3{font-family:'Montserrat',sans-serif;font-weight:800;font-size:17px;color:#fcfdf2;margin-bottom:6px;}
+    .next-card p{font-size:13px;color:rgba(252,253,242,.55);line-height:1.6;margin-bottom:20px;flex:1;}
+    .next-card .price{font-family:'Montserrat',sans-serif;font-weight:800;font-size:26px;color:#00d2ff;margin-bottom:20px;}
+    .next-btn{display:block;text-align:center;background:#00d2ff;color:#0a1628;font-family:'Montserrat',sans-serif;font-weight:800;font-size:13px;padding:13px 20px;border-radius:8px;text-decoration:none;transition:opacity .15s;}
+    .next-btn:hover{opacity:.85;}
+    .next-btn.secondary{background:transparent;color:#00d2ff;border:1px solid rgba(0,210,255,.4);}
+    .next-btn.secondary:hover{background:rgba(0,210,255,.06);}
+    .all-services{text-align:center;margin-top:8px;}
+    .all-services a{font-size:13px;color:rgba(0,210,255,.5);text-decoration:none;}
+    .all-services a:hover{color:#00d2ff;}
   </style>
 </head>
 <body>
@@ -201,6 +222,30 @@
       <div id="monitoringInviteStatus" style="margin-top:12px;font-size:13px;display:none;"></div>
     </div>
     {% endif %}
+
+    <!-- Next steps upsell -->
+    <div class="next-steps">
+      <div class="next-steps-eyebrow">What happens next</div>
+      <h2>Your results are in. Here's what to do next.</h2>
+      <p class="sub">Pick the level of help that suits you — no jargon, no lock-in.</p>
+      <div class="next-options">
+        <div class="next-card">
+          <div class="next-card-badge">Quick fix</div>
+          <h3>Home IT Help</h3>
+          <p>Slow Wi-Fi, printer won't connect, new device setup — we fix it and check your security while we're there.</p>
+          <div class="price">$99</div>
+          <a href="/book-it-support" class="next-btn secondary">Fix It Now — $99</a>
+        </div>
+        <div class="next-card featured">
+          <div class="next-card-badge">Most popular</div>
+          <h3>Complete Home Security Check</h3>
+          <p>Breach report, password vault setup, 2FA on key accounts, and an in-person home scan — everything in one week.</p>
+          <div class="price">$299</div>
+          <a href="/book-home-scan-bundle" class="next-btn">Get the Full Check — $299</a>
+        </div>
+      </div>
+      <div class="all-services"><a href="/services">See all services &rarr;</a></div>
+    </div>
 
     <a href="/" class="btn-new">&#43; Run Another Check</a>
 

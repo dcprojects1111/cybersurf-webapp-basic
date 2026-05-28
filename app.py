@@ -2063,6 +2063,11 @@ IT_SERVICE_MAP = {
 }
 
 
+@app.route("/services")
+def services():
+    return render_template("services.html")
+
+
 @app.route("/book-it-support")
 def book_it_support():
     preselected = request.args.get("service", "tune_up")
