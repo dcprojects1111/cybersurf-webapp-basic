@@ -23,7 +23,9 @@ from email.mime.text import MIMEText
 from flask import Flask, render_template, request, session, redirect, url_for, jsonify
 
 app = Flask(__name__)
-app.secret_key = os.environ.get("APP_SECRET", "change-this-in-production")
+app.secret_key = os.environ.get("APP_SECRET")
+if not app.secret_key:
+    raise RuntimeError("APP_SECRET environment variable must be set")
 
 # Credentials — set these as environment variables in Render
 APP_PASSWORD      = os.environ.get("APP_PASSWORD", "")
@@ -182,7 +184,7 @@ def health():
 def login():
     error = None
     if request.method == "POST":
-        if request.form.get("password") == APP_PASSWORD:
+        if _hmac.compare_digest(request.form.get("password", ""), APP_PASSWORD):
             session["authenticated"] = True
             return redirect(url_for("index"))
         error = "Incorrect password."
@@ -510,7 +512,8 @@ def upload_to_pcloud(filename, content):
     try:
         resp = requests.post(
             PCLOUD_UPLOAD,
-            params={"path": PCLOUD_FOLDER, "auth": PCLOUD_AUTH_TOKEN},
+            params={"path": PCLOUD_FOLDER},
+            headers={"Authorization": f"Bearer {PCLOUD_AUTH_TOKEN}"},
             files={"file": (filename, content.encode(), "text/html")},
             timeout=30,
         )
@@ -528,7 +531,8 @@ def get_pcloud_share_link(file_path):
     try:
         resp = requests.get(
             PCLOUD_PUBLINK,
-            params={"path": file_path, "auth": PCLOUD_AUTH_TOKEN},
+            params={"path": file_path},
+            headers={"Authorization": f"Bearer {PCLOUD_AUTH_TOKEN}"},
             timeout=15,
         )
         data = resp.json()
@@ -2453,11 +2457,6 @@ def _parse_post(filepath):
     html = _md.markdown(body) if (_MD_AVAILABLE and body) else body
     return {"slug": slug, "title": title or slug, "date": date, "content": html}
 
-@app.route("/blog/debug-path")
-def blog_debug():
-    import json
-    files = _glob.glob(os.path.join(_BLOG_DIR, "*.md"))
-    return jsonify({"blog_dir": _BLOG_DIR, "exists": os.path.isdir(_BLOG_DIR), "files": files})
 
 @app.route("/blog")
 def blog_index():
