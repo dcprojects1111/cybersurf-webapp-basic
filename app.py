@@ -64,6 +64,7 @@ SMTP_PORT  = int(os.environ.get("SMTP_PORT", "587"))
 SMTP_USER  = os.environ.get("SMTP_USER", "")
 SMTP_PASS  = os.environ.get("SMTP_PASS", "")
 FROM_EMAIL = os.environ.get("FROM_EMAIL", "noreply@cybersurf.au")
+REPORT_TO  = os.environ.get("REPORT_TO", "") or SMTP_USER   # founder copy of every report
 
 # Free 90-day breach monitoring (post-clean-result opt-in)
 # Generate key: python -c "import os,base64; print(base64.urlsafe_b64encode(os.urandom(32)).decode())"
@@ -324,7 +325,17 @@ def _e(s):
     return str(s).replace("&","&amp;").replace("<","&lt;").replace(">","&gt;").replace('"',"&quot;")
 
 
-def build_report_html(customer_name, results, dehashed_unavailable=False):
+def _mask_pw(pw):
+    """Mask a password for the internal/founder copy: keep first & last char."""
+    pw = str(pw or "")
+    if not pw:
+        return ""
+    if len(pw) <= 2:
+        return "•" * len(pw)
+    return pw[0] + "•" * (len(pw) - 2) + pw[-1]
+
+
+def build_report_html(customer_name, results, dehashed_unavailable=False, mask_passwords=False):
     now = datetime.now().strftime("%d %B %Y %H:%M AEST")
 
     risk_colours = {
@@ -357,7 +368,9 @@ def build_report_html(customer_name, results, dehashed_unavailable=False):
                     for cred in info["credentials"][:10]:
                         parts = []
                         if cred["username"]: parts.append(f"user: {_e(cred['username'])}")
-                        if cred["password"]: parts.append(f"pw: {_e(cred['password'])}")
+                        if cred["password"]:
+                            pw_show = _mask_pw(cred['password']) if mask_passwords else cred['password']
+                            parts.append(f"pw: {_e(pw_show)}")
                         if parts:
                             pills += f'<span style="display:inline-block;background:rgba(255,71,87,.12);border:1px solid rgba(255,71,87,.25);border-radius:5px;padding:3px 9px;font-family:monospace;font-size:12px;margin:2px 2px 2px 0;color:#ffcdd2;">{" &nbsp;|&nbsp; ".join(parts)}</span>'
                     if info["credentials"].__len__() > 10:
@@ -882,6 +895,30 @@ def send_breach_alert(to_email, name, new_sources):
         return False, str(e)
 
 
+def send_breach_report(to_email, customer_name, report_html, subject=None):
+    """Email a finished breach report (full HTML) to a recipient."""
+    if not SMTP_USER or not SMTP_PASS:
+        return False, "SMTP not configured"
+    if not to_email:
+        return False, "no recipient"
+    try:
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = subject or f"Your CyberSurf Breach Check Report — {customer_name}"
+        msg["From"]    = f"CyberSurf Security <{FROM_EMAIL}>"
+        msg["To"]      = to_email
+        msg.attach(MIMEText("Your CyberSurf Breach Check report is below. View this email in "
+                            "HTML mode if it does not display. This report may contain exposed "
+                            "passwords — treat it as confidential and delete it once actioned.", "plain"))
+        msg.attach(MIMEText(report_html, "html"))
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
+            server.starttls()
+            server.login(SMTP_USER, SMTP_PASS)
+            server.sendmail(FROM_EMAIL, to_email, msg.as_string())
+        return True, None
+    except Exception as e:
+        return False, str(e)
+
+
 def send_renewal_reminder(to_email, name, days_left):
     if not SMTP_USER or not SMTP_PASS:
         return False, "SMTP not configured"
@@ -1391,9 +1428,10 @@ def run_free_monitoring_checks():
 
             try:
                 data     = query_dehashed(email)
-                total    = data.get("total", 0)
                 entries  = data.get("entries") or []
+                if isinstance(entries, dict): entries = list(entries.values())
                 breaches = process_entries(entries)
+                total    = sum(b["count"] for b in breaches.values())
                 any_pw   = any(
                     "password" in f or "hashed password" in f
                     for info in breaches.values() for f in info["exposed_fields"]
@@ -1467,9 +1505,10 @@ def run_monitoring():
         try:
             for email in emails:
                 data     = query_dehashed(email)
-                total    = data.get("total", 0)
                 entries  = data.get("entries") or []
+                if isinstance(entries, dict): entries = list(entries.values())
                 breaches = process_entries(entries)
+                total    = sum(b["count"] for b in breaches.values())
                 any_pw   = any(
                     "password" in f or "hashed password" in f
                     for info in breaches.values() for f in info["exposed_fields"]
@@ -1616,9 +1655,10 @@ def free_monitoring_optin(session_id, token):
 
         try:
             data     = query_dehashed(email)
-            total    = data.get("total", 0)
             entries  = data.get("entries") or []
+            if isinstance(entries, dict): entries = list(entries.values())
             breaches = process_entries(entries)
+            total    = sum(b["count"] for b in breaches.values())
             any_pw   = any(
                 "password" in f or "hashed password" in f
                 for info in breaches.values() for f in info["exposed_fields"]
@@ -2370,9 +2410,10 @@ def run_check():
         try:
             data     = query_dehashed(email)
             balance  = data.get("balance")
-            total    = data.get("total", 0)
             entries  = data.get("entries") or []
+            if isinstance(entries, dict): entries = list(entries.values())
             breaches = process_entries(entries)
+            total    = sum(b["count"] for b in breaches.values())
         except DehashedUnavailable:
             dehashed_unavailable = True
             total    = 0
@@ -2402,20 +2443,32 @@ def run_check():
             "hibp":         hibp_breaches,   # list, [], or None
         })
 
-    # Build report
-    report_text = build_report_html(customer_name, results, dehashed_unavailable=dehashed_unavailable)
-    safe_name   = customer_name.replace(" ", "_")
-    date_str    = datetime.now().strftime("%Y-%m-%d_%H%M")
-    filename    = f"{safe_name}_{date_str}.html"
+    # Build reports — full copy for the customer, masked copy for the founder record
+    report_text    = build_report_html(customer_name, results, dehashed_unavailable=dehashed_unavailable)
+    founder_report = build_report_html(customer_name, results, dehashed_unavailable=dehashed_unavailable, mask_passwords=True)
+    safe_name      = customer_name.replace(" ", "_")
+    date_str       = datetime.now().strftime("%Y-%m-%d_%H%M")
+    filename       = f"{safe_name}_{date_str}.html"
 
-    # Upload to pCloud
-    uploaded, file_path, pcloud_error = upload_to_pcloud(filename, report_text)
+    # Deliver by email (pCloud retired). Full report to the customer, masked copy to the founder.
+    subject     = f"Your CyberSurf Breach Check Report — {customer_name}"
+    emailed_to  = None
+    email_error = None
+    if email1:
+        ok, err = send_breach_report(email1, customer_name, report_text, subject)
+        if ok:
+            emailed_to = email1
+        else:
+            email_error = err
 
-    # Generate share link
-    share_link = None
-    link_error = None
-    if uploaded:
-        share_link, link_error = get_pcloud_share_link(file_path)
+    founder_copied = False
+    if REPORT_TO:
+        okf, errf = send_breach_report(
+            REPORT_TO, customer_name, founder_report, f"[COPY] {subject} → {email1 or 'n/a'}"
+        )
+        founder_copied = okf
+        if not okf and not email_error:
+            email_error = errf
 
     all_clear = all(r["risk"][0] == "CLEAR" for r in results)
 
@@ -2423,14 +2476,13 @@ def run_check():
         customer_name        = customer_name,
         results              = results,
         filename             = filename,
-        uploaded             = uploaded,
-        pcloud_error         = pcloud_error,
-        share_link           = share_link,
-        link_error           = link_error,
         balance              = balance,
         dehashed_unavailable = dehashed_unavailable,
         order_session_id     = order_session_id,
         all_clear            = all_clear,
+        emailed_to           = emailed_to,
+        founder_copied       = founder_copied,
+        email_error          = email_error,
     )
 
 

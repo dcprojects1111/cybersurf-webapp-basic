@@ -109,24 +109,19 @@
 
   <div class="page">
 
-    <!-- Share link (primary action) -->
-    {% if share_link %}
+    <!-- Email delivery status (primary action) -->
+    {% if emailed_to %}
     <div class="share-box">
-      <h2>&#128279; Customer Secure Link — Send This</h2>
-      <p>Copy this link and send it to <strong style="color:#fcfdf2;">{{ customer_name }}</strong>. The report includes all breach details and any exposed credentials. Remind them to delete it after reading.</p>
-      <div class="link-row">
-        <input class="link-input" id="shareLink" value="{{ share_link }}" readonly/>
-        <button class="btn-copy" onclick="copyLink()">Copy Link</button>
-      </div>
-      <p class="share-note">&#9432; Hosted on pCloud. Delete the file from your pCloud account once the customer confirms receipt.</p>
-    </div>
-    {% elif uploaded %}
-    <div class="banner banner-warn">
-      &#9888; Report uploaded to pCloud but share link could not be generated: {{ link_error }}. File saved at: /CyberSurf Reports/{{ filename }}
+      <h2>&#9993; Report emailed to the customer</h2>
+      <p>The full report was emailed to <strong style="color:#fcfdf2;">{{ emailed_to }}</strong>.
+      {% if founder_copied %}A masked copy was also sent to your inbox for your records.{% endif %}</p>
+      <p class="share-note">&#9432; Nothing is stored — the report was generated and emailed. The masked copy auto-deletes after 30 days.</p>
     </div>
     {% else %}
     <div class="banner banner-err">
-      &#9888; pCloud upload failed: {{ pcloud_error }}. Copy the report text below manually.
+      &#9888; Report could not be emailed{% if email_error %}: {{ email_error }}{% endif %}.
+      {% if founder_copied %}A masked copy was sent to your inbox.{% endif %}
+      Copy the report text below and send it manually.
     </div>
     {% endif %}
 
